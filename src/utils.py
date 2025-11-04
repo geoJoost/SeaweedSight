@@ -3,17 +3,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import torch
+from PIL import Image
 
-def visualize_and_save(input_path, video_frames, points, video_res_masks, ann_frame_idx=0):
+def load_video_frames(frame_dir):
+    """Load video frames from a directory as a list of PIL Images."""
+    frame_paths = sorted([
+        os.path.join(frame_dir, fname)
+        for fname in os.listdir(frame_dir)
+        if fname.endswith('.jpg')
+    ])
+    return [Image.open(fp) for fp in frame_paths]
+
+def visualize_and_save(input_path, video_frames, points, video_res_masks, frame_idx, output_dir):
     # Create 'doc' folder if it doesn't exist
     os.makedirs('doc', exist_ok=True)
 
     # Load the first frame
-    frame = video_frames[ann_frame_idx]
+    frame = video_frames[frame_idx]
 
-    # Binarize the mask
-    binarized_mask = (video_res_masks[ann_frame_idx] > 0.5).to(torch.uint8) * 255
-    binarized_mask = binarized_mask.squeeze(0) # Remove first channel
+    # Combine masks for all objects into a single mask
+    # combined_mask = torch.max(video_res_masks, dim=0, keepdim=True)[0]
+    # combined_mask = torch.sigmoid(combined_mask) # Apply sigmoid to convert logits to probabilities
+    binarized_mask = (video_res_masks > 0.2).to(torch.uint8) * 255
+    binarized_mask = binarized_mask.cpu().squeeze().numpy()
 
     # Create figure
     fig, axes = plt.subplots(1, 4, figsize=(12, 6))
@@ -30,7 +42,7 @@ def visualize_and_save(input_path, video_frames, points, video_res_masks, ann_fr
 
     # Plot mask probabilities
     #axes[1].imshow(frame)
-    axes[1].imshow(video_res_masks[ann_frame_idx].squeeze(0).to(torch.float32), cmap='viridis')
+    axes[1].imshow(video_res_masks.cpu().squeeze().to(torch.float32), cmap='viridis')
     axes[1].set_title('Confidence')
     axes[1].axis('off')
 
@@ -48,8 +60,11 @@ def visualize_and_save(input_path, video_frames, points, video_res_masks, ann_fr
     plt.tight_layout()
 
     # Save the figure
-    output_path = os.path.join('doc', f"{os.path.basename(input_path)}_prompt_example.png")
+    basename = os.path.basename(input_path)
+    output_path = os.path.join(output_dir, f"{basename}_{frame_idx:06d}.png")
     plt.savefig(output_path, bbox_inches='tight', dpi=200)
     plt.close()
+
+    print(f"[INFO] Saved image to: {output_path}")
 
     return output_path
