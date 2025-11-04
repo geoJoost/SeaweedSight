@@ -20,10 +20,11 @@ def visualize_and_save(input_path, video_frames, points, video_res_masks, ann_fr
 
     # Plot original image with point annotation
     axes[0].imshow(frame)
-    for point_list in points:
-        for point in point_list[0]:
-            axes[0].add_patch(Circle((point[0], point[1]), 5, color='green', fill=True))
-            axes[0].add_patch(Circle((point[0], point[1]), 5, color='white', fill=False, lw=2))
+    for obj_points in points:
+        for point_list in obj_points:
+            for point in point_list:
+                plt.gca().add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
+                plt.gca().add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=2))
     axes[0].set_title('Image with prompt')
     axes[0].axis('off')
 

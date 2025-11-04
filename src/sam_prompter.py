@@ -59,11 +59,12 @@ def main(data_dir, model):
                 plt.gca().add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
                 plt.gca().add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=2))
 
-    plt.title('Image with Point Annotations')
+    plt.title('Image with point prompts')
     plt.axis('off')
+    plt.tight_layout()
     plt.savefig("doc/prompt_test.png")
-    plt.show()
 
+    # Inputs into processor
     processor.add_inputs_to_inference_session(
         inference_session=inference_session,
         frame_idx=ann_frame_idx,
