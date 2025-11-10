@@ -92,4 +92,4 @@ def process_video_to_frames(
 if __name__ == "__main__":
     input_video = r"data/Ducks/Ulva_05_1.avi"
     remove_ranges = [(0, 104), (2450, 2550), (4920, 5000)]  # TODO: Find exact frames using DaVinci
-    process_video_to_frames(input_video, frames_per_second=3, remove_ranges=remove_ranges)
+    process_video_to_frames(input_video, frames_per_second=1, remove_ranges=remove_ranges)

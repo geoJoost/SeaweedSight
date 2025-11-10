@@ -3,9 +3,73 @@
 import os
 import torch
 from transformers import Sam2VideoModel, Sam2VideoProcessor
+import cv2
+import numpy as np
 
 # Custom imports
-from utils import load_video_frames, visualize_and_save
+from utils import load_video_frames, visualize_and_save, visualize_luminance_prompts
+
+def select_prompts(frame, existing_masks=None, num_prompts=5, luminance_percentile=10):
+    """
+    Automatically select new positive prompts on green/edge regions.
+    Args:
+        frame: Current RGB frame.
+        existing_masks: Optional, to avoid re-prompting on already segmented regions.
+        num_prompts: Number of positive prompts to select.
+    Returns:
+        points: List of new prompt coordinates.
+        labels: List of prompt labels (1 for positive).
+    """
+    frame_np = np.array(frame)
+    r, g, b = frame_np.transpose(2, 0, 1)
+
+    # # Convert to Lab color space for better green/white separation
+    lab = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2LAB)
+    l, a, b = cv2.split(lab)
+
+    # Flatten luminance and find the threshold for the 10% darkest pixels, corresponding to the seaweed
+    dark_threshold = np.percentile(l.flatten(), luminance_percentile)  # 10th percentile = 10% darkest
+    dark_regions = l < dark_threshold
+
+    # # Flatten luminance and find the threshold for the 90% brightest pixels, corresponding to the background
+    # dark_threshold = np.percentile(l.flatten(), 10)  # 90th percentile = 90% darkest
+    # dark_regions = l > dark_threshold
+    
+    # Exclude already segmented regions
+    if existing_masks is not None:
+        # Combine all existing masks into a single binary mask
+        combined_mask = torch.mean(
+            torch.stack(list(existing_masks.values())),
+            dim=0
+        )[0].to(torch.float32).squeeze(0)
+        
+        # Convert logits to probabilities and binarize at 0.5
+        combined_mask_probs = torch.sigmoid(combined_mask)
+        combined_mask_binary = (combined_mask_probs > 0.5).cpu().numpy().astype(bool)
+
+        dark_regions = dark_regions & (~combined_mask_binary)
+
+    # Find connected components in green regions
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_regions.astype(np.uint8), connectivity=8)
+
+    # Select the largest 'num_prompts' components
+    if num_labels > 1:
+        largest_indices = np.argsort([stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)])[-num_prompts:]
+        points = []
+        for idx in largest_indices:
+            x = int(stats[idx + 1, cv2.CC_STAT_LEFT] + stats[idx + 1, cv2.CC_STAT_WIDTH] / 2)
+            y = int(stats[idx + 1, cv2.CC_STAT_TOP] + stats[idx + 1, cv2.CC_STAT_HEIGHT] / 2)
+            points.append([[x, y]])
+        labels = [[1] for _ in range(len(points))]
+
+        # Visualize steps used to create point prompts
+        # visualize_luminance_prompts(frame, l, dark_regions, points, luminance_percentile)
+
+        return points, labels
+    else:
+        print(f"[WARNING] No new point prompts found")
+        # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)
+        return [[]], [[]]
 
 def main(data_dir, model):
     # Set device: use CUDA if available, else CPU
@@ -21,62 +85,33 @@ def main(data_dir, model):
 
     # Initialize video inference session
     inference_session = processor.init_video_session(
-        video=video_frames,
+        video=video_frames[:150],
         inference_device=device,
+        inference_state_device='cpu', # Store cache on CPU
+        video_storage_device='cpu', # Store frames on CPU
+        max_vision_features_cache_size=1,  # Test
         dtype=torch.bfloat16,
     )
 
-    # Add click on first frame to select object
-    ann_frame_idx = 0
-    ann_obj_id = [0, 1, 2, 3]
-    points = [[[[180, 350]], [[880, 250]], [[880,800]], [[1250, 850]]]]
-    labels = [[[1], [1], [1], [1]]]
-
-    # Experiment with negative prompts for background
-    # ann_frame_idx = 0
-    # ann_obj_id = [0, 1, 2, 3]
-    # points = [[[[180, 350]], [[880, 250]], [[210, 900]], [[250, 600]]]]
-    # labels = [[[1], [1], [0], [0]]]
-    # ann_obj_id = [2, 3]
-    # points = [[[[210, 900]], [[250, 600]]]]  # Points for two objects
-    # labels = [[[0], [0]]]
-
-    ## TODO: REMOVE THIS CODE ##
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Circle
-    plt.imshow(video_frames[0])
-
-    # Loop through the points with the correct indexing
-    for obj_points in points:
-        for point_list in obj_points:
-            for point in point_list:
-                plt.gca().add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
-                plt.gca().add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=2))
-
-    plt.title('Image with point prompts')
-    plt.axis('off')
-    plt.tight_layout()
-    plt.savefig("doc/prompt_test.png")
+    # Automatically prompt the first frame
+    first_frame = video_frames[0]
+    points, labels = select_prompts(first_frame, num_prompts=5, luminance_percentile=10)
+    obj_ids = [1, 2, 3, 4, 5]  # Start with object IDs 1 and 2
 
     # Inputs into processor
     processor.add_inputs_to_inference_session(
         inference_session=inference_session,
-        frame_idx=ann_frame_idx,
-        obj_ids=ann_obj_id,
-        input_points=points,
-        input_labels=labels,
+        frame_idx=0,
+        obj_ids=obj_ids,
+        input_points=[points],
+        input_labels=[labels],
     )
 
-    # Segment the object on the first frame
-    outputs = model(
-        inference_session=inference_session,
-        frame_idx=ann_frame_idx
-    )
-
+    # Run inference for the first frame
+    outputs = model(inference_session=inference_session, frame_idx=0)
     video_res_masks = processor.post_process_masks(
         [outputs.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
-        )[0]
-    
+    )[0]
     print(f"[INFO] Segmentation shape: {video_res_masks.shape}")
 
     # Visualize first frame
@@ -86,18 +121,63 @@ def main(data_dir, model):
     output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
     os.makedirs(output_dir, exist_ok=True)
 
-    # Propagate through the entire video and collect logits
+    # Collect logits for all frames
     all_logits = {}
+
+    # Initialize with first frame
+    all_logits[0] = {
+        'logits': torch.max(video_res_masks, dim=0, keepdim=True)[0],
+        'points': points,
+        'labels': labels
+    }
+
+    # Propagate through the entire video
     for sam2_video_output in model.propagate_in_video_iterator(inference_session):
+        frame_idx = sam2_video_output.frame_idx
         video_res_masks = processor.post_process_masks(
             [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
         )[0]
+
         # Combine logits for all objects into a single mask per frame
         combined_logits = torch.max(video_res_masks, dim=0, keepdim=True)[0]
-        all_logits[sam2_video_output.frame_idx] = combined_logits
+        all_logits[frame_idx] = {
+            'logits': combined_logits,
+            'points': [],  # Default: no prompts
+            'labels': []
+        }
+
+        # Reprompt every 5 frames
+        if frame_idx % 5 == 0 and frame_idx != 0:
+            current_masks = {obj_id: mask for obj_id, mask in zip(inference_session.obj_ids, video_res_masks)}
+
+            # Select new prompts
+            new_points, new_labels = select_prompts(video_frames[frame_idx], 
+                                                    existing_masks=current_masks, 
+                                                    num_prompts=5, 
+                                                    luminance_percentile=10
+                                                    )
+
+            # Update prompts for this frame
+            all_logits[frame_idx]['points'] = new_points
+            all_logits[frame_idx]['labels'] = new_labels
+
+            # Assign new object IDS
+            new_obj_ids = [max(inference_session.obj_ids) + i + 1 for i in range(len(new_points))]
+
+            # Re-prompt SAM2
+            processor.add_inputs_to_inference_session(
+                inference_session=inference_session,
+                frame_idx=frame_idx,
+                obj_ids=new_obj_ids,
+                input_points=[new_points],
+                input_labels=[new_labels],
+            )
+
+            # Clear memory
+            torch.cuda.empty_cache() # TODO: Check if this actually works
 
     # Stack all logits into a single tensor (shape: [N, H, W])
-    logits_stack = torch.stack(list(all_logits.values()), dim=0)
+    logits_stack = torch.stack([all_logits[i]['logits'] for i in sorted(all_logits.keys())], dim=0)
 
     # Apply sigmoid to the entire stack at once
     probs_stack = torch.sigmoid(logits_stack)
@@ -108,16 +188,17 @@ def main(data_dir, model):
 
     # Visualize and save all frames
     for frame_idx, probs in enumerate(probs_stack):
-        # Get the corresponding original frame
-        original_frame = video_frames[list(all_logits.keys())[frame_idx]]
+        # Unpack prompts for this frame
+        current_points = all_logits[frame_idx]['points']
+        current_labels = all_logits[frame_idx]['labels']
 
-        # Reuse your existing function
+        # Save visualization for each frame with image, confidence, masks, and masks+image
         visualize_and_save(
             data_dir,
             video_frames,
-            points,
-            probs_stack[frame_idx:frame_idx+1],  # Pass as a 3D tensor with a single frame
-            frame_idx=list(all_logits.keys())[frame_idx],
+            current_points,
+            probs_stack[frame_idx:frame_idx+1],
+            frame_idx=frame_idx,
             output_dir=output_dir
         )
 
@@ -126,4 +207,4 @@ def main(data_dir, model):
 
 # Execute function
 if __name__ == "__main__":
-    main(data_dir=r"data/Ulva_05_1_trial2", model="facebook/sam2-hiera-large")
+    main(data_dir=r"data/Ulva_05_1_trial3", model="facebook/sam2-hiera-large")
