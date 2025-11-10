@@ -7,15 +7,16 @@ import cv2
 import numpy as np
 
 # Custom imports
-from utils import load_video_frames, visualize_and_save, visualize_luminance_prompts
+from src.utils import load_video_frames, visualize_sam2_outputs, visualize_luminance_prompts
 
-def select_prompts(frame, existing_masks=None, num_prompts=5, luminance_percentile=10):
+def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminance_percentile=10):
     """
-    Automatically select new positive prompts on green/edge regions.
+    Automatically select new positive prompts on darker regions.
     Args:
         frame: Current RGB frame.
         existing_masks: Optional, to avoid re-prompting on already segmented regions.
         num_prompts: Number of positive prompts to select.
+        luminance_percentile: Percentile to use for thresholding to create dark regions.
     Returns:
         points: List of new prompt coordinates.
         labels: List of prompt labels (1 for positive).
@@ -71,21 +72,21 @@ def select_prompts(frame, existing_masks=None, num_prompts=5, luminance_percenti
         # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)
         return [[]], [[]]
 
-def main(data_dir, model):
+def prompt_sam2(data_dir, model_name):
     # Set device: use CUDA if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
 
     # Initialize predictor
-    model = Sam2VideoModel.from_pretrained("facebook/sam2-hiera-base-plus").to(device, dtype=torch.bfloat16)
-    processor = Sam2VideoProcessor.from_pretrained("facebook/sam2-hiera-base-plus")
+    model = Sam2VideoModel.from_pretrained(model_name).to(device, dtype=torch.bfloat16)
+    processor = Sam2VideoProcessor.from_pretrained(model_name)
 
     # Load your video frames
     video_frames = load_video_frames(data_dir)
 
     # Initialize video inference session
     inference_session = processor.init_video_session(
-        video=video_frames[:150],
+        video=video_frames,#[:20],
         inference_device=device,
         inference_state_device='cpu', # Store cache on CPU
         video_storage_device='cpu', # Store frames on CPU
@@ -95,7 +96,7 @@ def main(data_dir, model):
 
     # Automatically prompt the first frame
     first_frame = video_frames[0]
-    points, labels = select_prompts(first_frame, num_prompts=5, luminance_percentile=10)
+    points, labels = create_luminance_prompts(first_frame, num_prompts=5, luminance_percentile=10)
     obj_ids = [1, 2, 3, 4, 5]  # Start with object IDs 1 and 2
 
     # Inputs into processor
@@ -114,9 +115,6 @@ def main(data_dir, model):
     )[0]
     print(f"[INFO] Segmentation shape: {video_res_masks.shape}")
 
-    # Visualize first frame
-    # visualize_and_save(data_dir, video_frames, points, video_res_masks, frame_idx=0, output_dir="doc")
-
     # Create output directory for this video
     output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
     os.makedirs(output_dir, exist_ok=True)
@@ -126,24 +124,31 @@ def main(data_dir, model):
 
     # Initialize with first frame
     all_logits[0] = {
-        'logits': torch.max(video_res_masks, dim=0, keepdim=True)[0],
+        # 'logits': torch.max(video_res_masks, dim=0, keepdim=True)[0],
+        'logits': video_res_masks, # Store full logits tensor for all objects
         'points': points,
-        'labels': labels
+        'labels': labels,
+        'obj_ids': obj_ids
     }
 
     # Propagate through the entire video
     for sam2_video_output in model.propagate_in_video_iterator(inference_session):
         frame_idx = sam2_video_output.frame_idx
         video_res_masks = processor.post_process_masks(
-            [sam2_video_output.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
+            [sam2_video_output.pred_masks], 
+            original_sizes=[[inference_session.video_height, inference_session.video_width]], 
+            binarize=False,
+            # binarize=True
         )[0]
 
         # Combine logits for all objects into a single mask per frame
         combined_logits = torch.max(video_res_masks, dim=0, keepdim=True)[0]
         all_logits[frame_idx] = {
             'logits': combined_logits,
+            # 'logits': video_res_masks, # Full logits tensor
             'points': [],  # Default: no prompts
-            'labels': []
+            'labels': [],
+            'obj_ids': inference_session.obj_ids
         }
 
         # Reprompt every 5 frames
@@ -151,7 +156,7 @@ def main(data_dir, model):
             current_masks = {obj_id: mask for obj_id, mask in zip(inference_session.obj_ids, video_res_masks)}
 
             # Select new prompts
-            new_points, new_labels = select_prompts(video_frames[frame_idx], 
+            new_points, new_labels = create_luminance_prompts(video_frames[frame_idx], 
                                                     existing_masks=current_masks, 
                                                     num_prompts=5, 
                                                     luminance_percentile=10
@@ -174,37 +179,19 @@ def main(data_dir, model):
             )
 
             # Clear memory
-            torch.cuda.empty_cache() # TODO: Check if this actually works
-
+            torch.cuda.empty_cache() # TODO: Check if this actually works]
+    
+    # For visualiztaion, combine logits across objects as before
     # Stack all logits into a single tensor (shape: [N, H, W])
     logits_stack = torch.stack([all_logits[i]['logits'] for i in sorted(all_logits.keys())], dim=0)
 
     # Apply sigmoid to the entire stack at once
     probs_stack = torch.sigmoid(logits_stack)
 
-    # Create output directory
-    output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
-    os.makedirs(output_dir, exist_ok=True)
+    print(f"[INFO] Tracked {len(inference_session.obj_ids):,} objects through {len(all_logits):,} frames")
 
-    # Visualize and save all frames
-    for frame_idx, probs in enumerate(probs_stack):
-        # Unpack prompts for this frame
-        current_points = all_logits[frame_idx]['points']
-        current_labels = all_logits[frame_idx]['labels']
+    return video_frames, probs_stack, all_logits
 
-        # Save visualization for each frame with image, confidence, masks, and masks+image
-        visualize_and_save(
-            data_dir,
-            video_frames,
-            current_points,
-            probs_stack[frame_idx:frame_idx+1],
-            frame_idx=frame_idx,
-            output_dir=output_dir
-        )
-
-    # print(f"[INFO] Tracked {len(inference_session.obj_ids):,} objects through {len(video_segments):,} frames")
-    print('...')
-
-# Execute function
-if __name__ == "__main__":
-    main(data_dir=r"data/Ulva_05_1_trial3", model="facebook/sam2-hiera-large")
+# # Execute function
+# if __name__ == "__main__":
+#     prompt_sam2(data_dir=r"data/Ulva_05_1_trial3", model="facebook/sam2-hiera-large")

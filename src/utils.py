@@ -6,13 +6,18 @@ import torch
 from PIL import Image
 import cv2
 
-def load_video_frames(frame_dir):
-    """Load video frames from a directory as a list of PIL Images."""
+def get_frame_paths(frame_dir):
+    """Get sorted frame paths from a directory."""
     frame_paths = sorted([
         os.path.join(frame_dir, fname)
         for fname in os.listdir(frame_dir)
         if fname.endswith('.jpg')
     ])
+    return frame_paths
+
+def load_video_frames(frame_dir):
+    """Load video frames from a directory as a list of PIL Images."""
+    frame_paths = get_frame_paths(frame_dir)
     return [Image.open(fp) for fp in frame_paths]
 
 def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_threshold, output_path="doc/prompt_experiment_luminance.png"):
@@ -64,17 +69,16 @@ def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_thresh
     print(f"[INFO] Points: {points}")
     print(f"[INFO] Dark region pixels: {np.sum(dark_regions)}")
 
-def visualize_and_save(input_path, video_frames, points, video_res_masks, frame_idx, output_dir):
-    # Create 'doc' folder if it doesn't exist
-    os.makedirs('doc', exist_ok=True)
-
-    # Load the first frame
+def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, frame_idx, data_dir, conf_threshold=0.5):
+    # Create output directory
+    output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
+    
+    os.makedirs(output_dir, exist_ok=True)
+    # Load the frame
     frame = video_frames[frame_idx]
 
     # Combine masks for all objects into a single mask
-    # combined_mask = torch.max(video_res_masks, dim=0, keepdim=True)[0]
-    # combined_mask = torch.sigmoid(combined_mask) # Apply sigmoid to convert logits to probabilities
-    binarized_mask = (video_res_masks > 0.5).to(torch.uint8) * 255
+    binarized_mask = (video_res_masks > conf_threshold).to(torch.uint8) * 255
     binarized_mask = binarized_mask.cpu().squeeze().numpy()
 
     # Create figure
@@ -117,3 +121,48 @@ def visualize_and_save(input_path, video_frames, points, video_res_masks, frame_
     print(f"[INFO] Saved image to: {output_path}")
 
     return output_path
+
+def visualize_surface_area(surface_areas, conf_threshold, data_dir, output_dir):
+    """
+    Visualize surface area trends over time.
+
+    Args:
+        surface_areas (list): List of surface areas for each frame.
+        output_dir (str): Directory to save the plots.
+    """
+    # Create figure
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    # Plot surface area per frame
+    frame_indices = range(len(surface_areas))
+    ax1.plot(frame_indices, surface_areas, 'b-', label='Surface area [px/frame]')
+    ax1.set_xlabel('Frame [-]')
+    ax1.set_ylabel('Surface area [px])', color='b')
+    ax1.tick_params(axis='y', labelcolor='b')
+
+    # Calculate cumulative surface area
+    cumulative_areas = np.cumsum(surface_areas)
+
+    # Create a second y-axis for cumulative area
+    ax2 = ax1.twinx()
+    ax2.plot(frame_indices, cumulative_areas, 'r-', label='Cumulative surface area')
+    ax2.set_ylabel('Cumulative surface area [px]', color='r')
+    ax2.tick_params(axis='y', labelcolor='r')
+
+    # Add title and legend
+    plt.title(f'Surface area [SAM2; conf: {conf_threshold}]')
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+
+    plt.tight_layout()
+
+    # Save the plot
+    basename = os.path.basename(data_dir)
+    plot_path = os.path.join(output_dir, f'{basename}_surface_area.png')
+    plt.savefig(plot_path, dpi=200)
+    plt.close()
+
+    print(f"[INFO] Saved surface area trends plot to: {plot_path}")
+
+    return plot_path
