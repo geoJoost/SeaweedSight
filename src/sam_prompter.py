@@ -72,7 +72,7 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
         # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)
         return [[]], [[]]
 
-def prompt_sam2(data_dir, model_name):
+def prompt_sam2(data_dir, model_name, max_frames=None):
     # Set device: use CUDA if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -84,9 +84,12 @@ def prompt_sam2(data_dir, model_name):
     # Load your video frames
     video_frames = load_video_frames(data_dir)
 
+    # Slice video_frames if max_frames is specified
+    video_frames_inference = video_frames if max_frames is None else video_frames[:max_frames]
+
     # Initialize video inference session
     inference_session = processor.init_video_session(
-        video=video_frames,#[:20],
+        video=video_frames_inference,
         inference_device=device,
         inference_state_device='cpu', # Store cache on CPU
         video_storage_device='cpu', # Store frames on CPU

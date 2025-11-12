@@ -20,6 +20,59 @@ def load_video_frames(frame_dir):
     frame_paths = get_frame_paths(frame_dir)
     return [Image.open(fp) for fp in frame_paths]
 
+def calculate_surface_area(frame_probs, conf_threshold):
+    """
+    Calculate surface areas for objects in the current frame.
+
+    Args:
+        frame_probs (torch.Tensor): Confidence probabilities for the current frame, shape [num_objects, 1, h, w]
+        conf_threshold (int): Threshold to use for  (list): List of object IDs for the current frame.
+
+    Returns:
+        dict: Surface area data for the current frame.
+    """
+
+    # Binarize
+    binarized_mask = (frame_probs > conf_threshold).to(torch.uint8)
+
+    # Calculate surface area
+    surface_area = binarized_mask.sum().item()
+
+    return surface_area, binarized_mask
+
+def extract_color_features(frame, binarized_mask):
+    """
+    Extract mean RGB and Lab color values from the region defined by binarized_mask.
+
+    Args:
+        frame (np.ndarray): Original frame (BGR format, as loaded by OpenCV).
+        binarized_mask (np.ndarray): Binary mask (0, 1) where 1 indicates the region of interest.
+
+    Returns:
+        dict: Dictionary containing mean R, G, B, L, a, b values for the masked region.
+    """
+    # Correct formats to Numpy
+    mask = binarized_mask.to(torch.bool).cpu().numpy()
+    frame_np = np.array(frame)
+
+    # Extract RGB values
+    r, g, b = frame_np[mask, 0], frame_np[mask, 1], frame_np[mask, 2]
+
+    # Convert to Lab color space
+    lab_frame = cv2.cvtColor(frame_np, cv2.COLOR_RGB2LAB)
+    l, a, lab_b = lab_frame[mask].T
+
+    # Compute mean values
+    features = {
+        'mean_R': np.mean(r),
+        'mean_G': np.mean(g),
+        'mean_B': np.mean(b),
+        'mean_L': np.mean(l),
+        'mean_a': np.mean(a),
+        'mean_b': np.mean(lab_b),
+    }
+    return features
+
 def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_threshold, output_path="doc/prompt_experiment_luminance.png"):
     """
     Visualize the original frame, luminance channel, dark regions, and connected components.
@@ -69,11 +122,11 @@ def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_thresh
     print(f"[INFO] Points: {points}")
     print(f"[INFO] Dark region pixels: {np.sum(dark_regions)}")
 
-def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, frame_idx, data_dir, conf_threshold=0.5):
+def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, frame_idx, data_dir, output_folder, conf_threshold=0.5):
     # Create output directory
-    output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
-    
+    output_dir = os.path.join(output_folder, f"{os.path.basename(data_dir)}_processed")
     os.makedirs(output_dir, exist_ok=True)
+    
     # Load the frame
     frame = video_frames[frame_idx]
 
@@ -122,47 +175,42 @@ def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, fr
 
     return output_path
 
-def visualize_surface_area(surface_areas, conf_threshold, data_dir, output_dir):
+def visualize_features(df, conf_threshold, data_dir, output_dir):
     """
-    Visualize surface area trends over time.
+    Visualize trends of all features (except cumulative_surface_area) over time.
 
     Args:
-        surface_areas (list): List of surface areas for each frame.
+        df (pd.DataFrame): DataFrame containing all features.
+        conf_threshold (float): Confidence threshold used for segmentation.
+        data_dir (str): Directory containing the data.
         output_dir (str): Directory to save the plots.
     """
-    # Create figure
-    fig, ax1 = plt.subplots(figsize=(12, 6))
+    # Define feature keys (excluding cumulative_surface_area)
+    feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
 
-    # Plot surface area per frame
-    frame_indices = range(len(surface_areas))
-    ax1.plot(frame_indices, surface_areas, 'b-', label='Surface area [px/frame]')
-    ax1.set_xlabel('Frame [-]')
-    ax1.set_ylabel('Surface area [px])', color='b')
-    ax1.tick_params(axis='y', labelcolor='b')
+    # Create a figure with subplots
+    fig, axes = plt.subplots(nrows=len(feature_keys), ncols=1, figsize=(8, 8), sharex=True)
 
-    # Calculate cumulative surface area
-    cumulative_areas = np.cumsum(surface_areas)
+    # Plot each feature in its own subplot
+    for i, feature in enumerate(feature_keys):
+        ax = axes[i]
+        ax.plot(df['frame_id'], df[feature], label=feature)
+        ax.set_ylabel(feature)
+        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.legend(loc='upper left')
 
-    # Create a second y-axis for cumulative area
-    ax2 = ax1.twinx()
-    ax2.plot(frame_indices, cumulative_areas, 'r-', label='Cumulative surface area')
-    ax2.set_ylabel('Cumulative surface area [px]', color='r')
-    ax2.tick_params(axis='y', labelcolor='r')
+    # Set common x-label and title
+    axes[-1].set_xlabel('Frame [-]')
+    plt.suptitle(f'Feature Trends [SAM2; conf: {conf_threshold}]', y=1.02)
 
-    # Add title and legend
-    plt.title(f'Surface area [SAM2; conf: {conf_threshold}]')
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-
+    # Adjust layout
     plt.tight_layout()
 
     # Save the plot
     basename = os.path.basename(data_dir)
-    plot_path = os.path.join(output_dir, f'{basename}_surface_area.png')
+    plot_path = os.path.join(output_dir, f'{basename}_features.png')
     plt.savefig(plot_path, dpi=200)
     plt.close()
 
-    print(f"[INFO] Saved surface area trends plot to: {plot_path}")
-
+    print(f"[INFO] Saved feature trends plot to: {plot_path}")
     return plot_path
