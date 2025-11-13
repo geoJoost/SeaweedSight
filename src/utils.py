@@ -5,13 +5,14 @@ from matplotlib.patches import Circle
 import torch
 from PIL import Image
 import cv2
+import re
 
 def get_frame_paths(frame_dir):
     """Get sorted frame paths from a directory."""
     frame_paths = sorted([
         os.path.join(frame_dir, fname)
         for fname in os.listdir(frame_dir)
-        if fname.endswith('.jpg')
+        if fname.endswith(('.jpg', '.png'))
     ])
     return frame_paths
 
@@ -19,6 +20,19 @@ def load_video_frames(frame_dir):
     """Load video frames from a directory as a list of PIL Images."""
     frame_paths = get_frame_paths(frame_dir)
     return [Image.open(fp) for fp in frame_paths]
+
+
+def extract_density_from_dir(data_dir):
+    """
+    Extract density (g/L) from directory name (e.g., Ulva_05_1_trial1 -> 0.5).
+    """
+    match = re.search(r'Ulva_(\d+)', data_dir)
+    if match:
+        density_str = match.group(1)
+        density = float(density_str) / 10  # Convert to float (e.g., 05 -> 0.5)
+        return density
+    else:
+        raise ValueError(f"[ERROR] Could not extract density from directory: {data_dir}")
 
 def calculate_surface_area(frame_probs, conf_threshold):
     """
@@ -148,7 +162,7 @@ def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, fr
 
     # Plot mask probabilities
     #axes[1].imshow(frame)
-    axes[1].imshow(video_res_masks.cpu().squeeze().to(torch.float32), cmap='viridis')
+    axes[1].imshow(video_res_masks.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
     axes[1].set_title('Confidence')
     axes[1].axis('off')
 

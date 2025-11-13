@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
 import os
+import glob
 
 # Custom imports
 from src.sam_prompter import prompt_sam2
-from src.utils import get_frame_paths, visualize_sam2_outputs, visualize_features, calculate_surface_area, extract_color_features
+from src.utils import get_frame_paths, visualize_sam2_outputs, visualize_features, \
+    extract_density_from_dir, calculate_surface_area, extract_color_features
+from src.data_exploration import plot_features_vs_density
 
 def process_video_directory(
     data_dirs,
@@ -35,6 +38,7 @@ def process_video_directory(
         df['frame_path'] = get_frame_paths(data_dir)[:max_frames] if max_frames else get_frame_paths(data_dir)
         df['frame_id'] = df['frame_path'].apply(lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         df[['model_name', 'conf_threshold']] = model_name, conf_threshold
+        df['density'] = extract_density_from_dir(data_dir)
 
         # Prompt SAM2
         video_frames, probs_stack, all_logits = prompt_sam2(data_dir, model_name, max_frames)
@@ -65,7 +69,7 @@ def process_video_directory(
                 data_dir,
                 video_frames,
                 current_points,
-                probs[frame_idx:frame_idx+1],
+                probs,
                 frame_idx=frame_idx,
                 data_dir=data_dir,
                 output_folder=output_folder,
@@ -87,18 +91,32 @@ def process_video_directory(
         df.to_csv(os.path.join(output_folder, output_path), index=False)
 
         print(f"[INFO] Saved processed data for {data_dir} to: {output_path}")
+    
+    # Combine all CSV's
+    csv_files = glob.glob(os.path.join(output_folder,'*.csv'))
+    df = pd.concat((pd.read_csv(f) for f in csv_files), ignore_index=True)
+
+    # Compute correlation
+    plot_features_vs_density(
+        df=df,
+        features=['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
+        output_folder=output_folder
+    )
+
+    print('[INFO] Code finished...')
 
 
 data_dirs = [
     "data/Ulva_05_1_trial1",
     "data/Ulva_05_1_trial2",
-    "data/Ulva_10_1_trial1",
+    "data/Ulva_05_1_trial3",
+    # "data/Ulva_10_1_trial1",
 ]
 
 process_video_directory(
     data_dirs=data_dirs,
-    model_name="facebook/sam2-hiera-base-plus",
+    model_name="facebook/sam2-hiera-tiny",
     conf_threshold=0.5,
     output_folder="data/processed",
-    max_frames=20,
+    max_frames=50,
 )

@@ -1,18 +1,13 @@
 """Script for pre-processing of video data by splitting into individual trials 
 """
 
-# TODO: Resize to 1024x1024 max
-# TODO: Implement proper ROI for all videos
-# TODO: Take correct number of frames based on the FPS used (i.e., 15 vs 30 fps)
-# TODO: 
-
 import cv2
 import os
 
 def process_video_to_frames(
     input_path: str,
     frames_per_second: int = 1,
-    remove_ranges: list = None,
+    keep_ranges: list = None,
     output_dir: str = "data"
 ) -> None:
     """
@@ -25,11 +20,11 @@ def process_video_to_frames(
     Args:
         input_path: Path to the input .avi file.
         frames_per_second: Number of frames to select per second (default: 1).
-        remove_ranges: List of frame ranges to remove (e.g., [(4000, 4500), (7900, 8000)]).
+        keep_ranges: List of frame ranges to keep (e.g., [(104, 2450), (2551, 4919), (5001, None)])
         output_dir: Base directory to save frames (default: "data").
     """
-    if remove_ranges is None:
-        remove_ranges = []
+    if keep_ranges is None:
+        keep_ranges = []
 
     # Read the video file
     cap = cv2.VideoCapture(input_path)
@@ -46,7 +41,7 @@ def process_video_to_frames(
 
     # Generate output directory names
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    trial_dirs = [os.path.join(output_dir, f"{base_name}_trial{i+1}") for i in range(3)]
+    trial_dirs = [os.path.join(output_dir, f"{base_name}_trial_png{i+1}") for i in range(len(keep_ranges))]
 
     # Create output directories if they don't exist
     for d in trial_dirs:
@@ -54,42 +49,53 @@ def process_video_to_frames(
 
     frame_count = 0
     current_trial = 0
-    frame_number = 0
+    frame_number = 0 # Frame number within the current trial
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            break
+            break  # End of video
 
-        # Skip frames if needed
+        # Skip frames to achieve the desired frame rate
         if frame_count % skip_frames != 0:
             frame_count += 1
             continue
 
-        # Check if current frame is in any remove range
-        in_remove_range = any(
-            start <= frame_count <= end
-            for start, end in remove_ranges
-        )
-        if in_remove_range:
+        # Check if the current frame is in any of the keep ranges
+        in_keep_range = False
+        for trial_idx, (start, end) in enumerate(keep_ranges):
+            # Check if the frame is within the current keep range
+            if start <= frame_count <= (end if end is not None else float('inf')):
+                in_keep_range = True
+                # Switch trials if necessary
+                if trial_idx != current_trial:
+                    current_trial = trial_idx
+                    frame_number = 0  # Reset frame number for the new trial
+                break
+
+        if not in_keep_range:
             frame_count += 1
-            continue
+            continue  # Skip frames not in any keep range
 
-        # Determine which trial to save to based on remove ranges
-        if remove_ranges and frame_count > remove_ranges[0][1]:
-            current_trial = 1
-        if len(remove_ranges) > 1 and frame_count > remove_ranges[1][1]:
-            current_trial = 2
-
-        # Save frame as .jpg
+        # Save the frame
         frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
         cv2.imwrite(frame_path, frame)
+
+        # Increment counters
         frame_number += 1
         frame_count += 1
 
     cap.release()
     print(f"[INFO] Frames saved in: {', '.join(trial_dirs)}")
 
+## TODO's ##
+# TODO: Find exact frames using DaVinci
+# TODO: Implement proper ROI for all videos
+# TODO: Take correct number of frames based on the FPS used (i.e., 15 vs 30 fps)
+# TODO: At 0.5G/L, more than three trials are made
+
+# Split video into individual trials
 if __name__ == "__main__":
     input_video = r"data/Ducks/Ulva_05_1.avi"
-    remove_ranges = [(0, 104), (2450, 2550), (4920, 5000)]  # TODO: Find exact frames using DaVinci
-    process_video_to_frames(input_video, frames_per_second=1, remove_ranges=remove_ranges)
+    keep_ranges = [(104, 2450), (2550, 4920), (5000, None)]  
+    process_video_to_frames(input_video, frames_per_second=1, keep_ranges=keep_ranges)
