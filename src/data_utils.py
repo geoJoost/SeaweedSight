@@ -74,13 +74,13 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
         for idx in largest_indices:
             x = int(stats[idx + 1, cv2.CC_STAT_LEFT] + stats[idx + 1, cv2.CC_STAT_WIDTH] / 2)
             y = int(stats[idx + 1, cv2.CC_STAT_TOP] + stats[idx + 1, cv2.CC_STAT_HEIGHT] / 2)
-            points.append([[x, y]])
-        labels = [[1] for _ in range(len(points))]
+            points.append([x, y])
+        labels = [1 for _ in range(len(points))]
 
         # Visualize steps used to create point prompts
         # visualize_luminance_prompts(frame, l, dark_regions, points, luminance_percentile)
 
-        return points, labels
+        return [[points]], [labels]
     else:
         print(f"[WARNING] No new point prompts found")
         # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)
