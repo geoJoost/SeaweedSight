@@ -5,7 +5,7 @@ import glob
 
 # Custom imports
 from src.sam_prompter import prompt_sam2
-from src.utils import get_frame_paths, visualize_sam2_outputs, visualize_features, \
+from data_utils import get_frame_paths, visualize_sam2_outputs, visualize_features, \
     extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.data_exploration import plot_features_vs_density
 
@@ -110,7 +110,9 @@ data_dirs = [
     "data/Ulva_05_1_trial1",
     "data/Ulva_05_1_trial2",
     "data/Ulva_05_1_trial3",
-    # "data/Ulva_10_1_trial1",
+    "data/Ulva_10_1_trial1",
+    "data/Ulva_10_1_trial2",
+    "data/Ulva_10_1_trial3"
 ]
 
 process_video_directory(

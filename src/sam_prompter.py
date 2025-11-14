@@ -7,70 +7,9 @@ import cv2
 import numpy as np
 
 # Custom imports
-from src.utils import load_video_frames, visualize_sam2_outputs, visualize_luminance_prompts
+from data_utils import load_video_frames, create_luminance_prompts
+from visualization_utils import visualize_sam2_outputs, visualize_luminance_prompts
 
-def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminance_percentile=10):
-    """
-    Automatically select new positive prompts on darker regions.
-    Args:
-        frame: Current RGB frame.
-        existing_masks: Optional, to avoid re-prompting on already segmented regions.
-        num_prompts: Number of positive prompts to select.
-        luminance_percentile: Percentile to use for thresholding to create dark regions.
-    Returns:
-        points: List of new prompt coordinates.
-        labels: List of prompt labels (1 for positive).
-    """
-    frame_np = np.array(frame)
-    r, g, b = frame_np.transpose(2, 0, 1)
-
-    # # Convert to Lab color space for better green/white separation
-    lab = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2LAB)
-    l, a, b = cv2.split(lab)
-
-    # Flatten luminance and find the threshold for the 10% darkest pixels, corresponding to the seaweed
-    dark_threshold = np.percentile(l.flatten(), luminance_percentile)  # 10th percentile = 10% darkest
-    dark_regions = l < dark_threshold
-
-    # # Flatten luminance and find the threshold for the 90% brightest pixels, corresponding to the background
-    # dark_threshold = np.percentile(l.flatten(), 10)  # 90th percentile = 90% darkest
-    # dark_regions = l > dark_threshold
-    
-    # Exclude already segmented regions
-    if existing_masks is not None:
-        # Combine all existing masks into a single binary mask
-        combined_mask = torch.mean(
-            torch.stack(list(existing_masks.values())),
-            dim=0
-        )[0].to(torch.float32).squeeze(0)
-        
-        # Convert logits to probabilities and binarize at 0.5
-        combined_mask_probs = torch.sigmoid(combined_mask)
-        combined_mask_binary = (combined_mask_probs > 0.5).cpu().numpy().astype(bool)
-
-        dark_regions = dark_regions & (~combined_mask_binary)
-
-    # Find connected components in green regions
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(dark_regions.astype(np.uint8), connectivity=8)
-
-    # Select the largest 'num_prompts' components
-    if num_labels > 1:
-        largest_indices = np.argsort([stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)])[-num_prompts:]
-        points = []
-        for idx in largest_indices:
-            x = int(stats[idx + 1, cv2.CC_STAT_LEFT] + stats[idx + 1, cv2.CC_STAT_WIDTH] / 2)
-            y = int(stats[idx + 1, cv2.CC_STAT_TOP] + stats[idx + 1, cv2.CC_STAT_HEIGHT] / 2)
-            points.append([[x, y]])
-        labels = [[1] for _ in range(len(points))]
-
-        # Visualize steps used to create point prompts
-        # visualize_luminance_prompts(frame, l, dark_regions, points, luminance_percentile)
-
-        return points, labels
-    else:
-        print(f"[WARNING] No new point prompts found")
-        # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)
-        return [[]], [[]]
 
 def prompt_sam2(data_dir, model_name, max_frames=None):
     # Set device: use CUDA if available, else CPU
@@ -117,10 +56,6 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
         [outputs.pred_masks], original_sizes=[[inference_session.video_height, inference_session.video_width]], binarize=False
     )[0]
     print(f"[INFO] Segmentation shape: {video_res_masks.shape}")
-
-    # Create output directory for this video
-    output_dir = os.path.join("data", f"{os.path.basename(data_dir)}_processed")
-    os.makedirs(output_dir, exist_ok=True)
 
     # Collect logits for all frames
     all_logits = {}
@@ -182,7 +117,7 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
             )
 
             # Clear memory
-            torch.cuda.empty_cache() # TODO: Check if this actually works]
+            torch.cuda.empty_cache() # TODO: Check if this actually works
     
     # For visualiztaion, combine logits across objects as before
     # Stack all logits into a single tensor (shape: [N, H, W])
@@ -194,7 +129,3 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
     print(f"[INFO] Tracked {len(inference_session.obj_ids):,} objects through {len(all_logits):,} frames")
 
     return video_frames, probs_stack, all_logits
-
-# # Execute function
-# if __name__ == "__main__":
-#     prompt_sam2(data_dir=r"data/Ulva_05_1_trial3", model="facebook/sam2-hiera-large")

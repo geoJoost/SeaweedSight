@@ -3,89 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import torch
-from PIL import Image
 import cv2
-import re
-
-def get_frame_paths(frame_dir):
-    """Get sorted frame paths from a directory."""
-    frame_paths = sorted([
-        os.path.join(frame_dir, fname)
-        for fname in os.listdir(frame_dir)
-        if fname.endswith(('.jpg', '.png'))
-    ])
-    return frame_paths
-
-def load_video_frames(frame_dir):
-    """Load video frames from a directory as a list of PIL Images."""
-    frame_paths = get_frame_paths(frame_dir)
-    return [Image.open(fp) for fp in frame_paths]
-
-
-def extract_density_from_dir(data_dir):
-    """
-    Extract density (g/L) from directory name (e.g., Ulva_05_1_trial1 -> 0.5).
-    """
-    match = re.search(r'Ulva_(\d+)', data_dir)
-    if match:
-        density_str = match.group(1)
-        density = float(density_str) / 10  # Convert to float (e.g., 05 -> 0.5)
-        return density
-    else:
-        raise ValueError(f"[ERROR] Could not extract density from directory: {data_dir}")
-
-def calculate_surface_area(frame_probs, conf_threshold):
-    """
-    Calculate surface areas for objects in the current frame.
-
-    Args:
-        frame_probs (torch.Tensor): Confidence probabilities for the current frame, shape [num_objects, 1, h, w]
-        conf_threshold (int): Threshold to use for  (list): List of object IDs for the current frame.
-
-    Returns:
-        dict: Surface area data for the current frame.
-    """
-
-    # Binarize
-    binarized_mask = (frame_probs > conf_threshold).to(torch.uint8)
-
-    # Calculate surface area
-    surface_area = binarized_mask.sum().item()
-
-    return surface_area, binarized_mask
-
-def extract_color_features(frame, binarized_mask):
-    """
-    Extract mean RGB and Lab color values from the region defined by binarized_mask.
-
-    Args:
-        frame (np.ndarray): Original frame (BGR format, as loaded by OpenCV).
-        binarized_mask (np.ndarray): Binary mask (0, 1) where 1 indicates the region of interest.
-
-    Returns:
-        dict: Dictionary containing mean R, G, B, L, a, b values for the masked region.
-    """
-    # Correct formats to Numpy
-    mask = binarized_mask.to(torch.bool).cpu().numpy()
-    frame_np = np.array(frame)
-
-    # Extract RGB values
-    r, g, b = frame_np[mask, 0], frame_np[mask, 1], frame_np[mask, 2]
-
-    # Convert to Lab color space
-    lab_frame = cv2.cvtColor(frame_np, cv2.COLOR_RGB2LAB)
-    l, a, lab_b = lab_frame[mask].T
-
-    # Compute mean values
-    features = {
-        'mean_R': np.mean(r),
-        'mean_G': np.mean(g),
-        'mean_B': np.mean(b),
-        'mean_L': np.mean(l),
-        'mean_a': np.mean(a),
-        'mean_b': np.mean(lab_b),
-    }
-    return features
+import os
+import torch
+import cv2
+import numpy as np
 
 def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_threshold, output_path="doc/prompt_experiment_luminance.png"):
     """
