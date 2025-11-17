@@ -166,19 +166,16 @@ def process_video_n_frames(
 video_configs = {
     r"data/Ducks/Ulva_05_1.avi": [(204, 3980), (4090, 9236), (9489, 13285)],
     r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
+    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
 
     }
 
 
-# Process
+# Split video into individual trials
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
-    process_video_n_frames(input_video, n_frames=175, keep_ranges=keep_ranges)
+    # process_video_n_frames(input_video, n_frames=175, keep_ranges=keep_ranges)
 
-
-
-# # Split video into individual trials
-# if __name__ == "__main__":
-#     # input_video = r"data/Ducks/Ulva_05_1.avi"
-#     # keep_ranges = [(104, 2450), (2550, 4920), (5000, None)]  
-#     # # process_video_to_frames(input_video, frames_per_second=1, keep_ranges=keep_ranges) # Old function
+    process_video_to_frames(input_video, frames_per_second=2, keep_ranges=keep_ranges) # Old function

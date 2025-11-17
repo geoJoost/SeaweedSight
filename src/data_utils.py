@@ -8,6 +8,10 @@ import os
 import torch
 import cv2
 import numpy as np
+from scipy.spatial.distance import cdist
+
+# Custom imports
+from src.visualization_utils import visualize_luminance_prompts
 
 def get_frame_paths(frame_dir):
     """Get sorted frame paths from a directory."""
@@ -72,15 +76,32 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
         largest_indices = np.argsort([stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels)])[-num_prompts:]
         points = []
         for idx in largest_indices:
+            # Calculate centroid
             x = int(stats[idx + 1, cv2.CC_STAT_LEFT] + stats[idx + 1, cv2.CC_STAT_WIDTH] / 2)
             y = int(stats[idx + 1, cv2.CC_STAT_TOP] + stats[idx + 1, cv2.CC_STAT_HEIGHT] / 2)
-            points.append([x, y])
-        labels = [1 for _ in range(len(points))]
+
+            # Get mask points for this component only
+            component_mask = (labels == idx + 1)
+            component_points = np.argwhere(component_mask)  # Shape: [N, 2] (y, x)
+
+            # Check if centroid is within the region
+            if dark_regions[y, x]:
+                points.append([[x, y]])
+                # print(f"[DEBUG] Point ({x, y} is on dark_regions)")
+            else:
+                # Find the closest mask point
+                # print(f"[DEBUG] Point ({x, y} is NOT on dark_regions)")
+                distances = cdist([(x, y)], component_points)
+                closest_y, closest_x = component_points[np.argmin(distances)]
+                points.append([[closest_x, closest_y]])
+
+            # points.append([[x, y]])
+        labels = [[1] for _ in range(len(points))]
 
         # Visualize steps used to create point prompts
         # visualize_luminance_prompts(frame, l, dark_regions, points, luminance_percentile)
 
-        return [[points]], [labels]
+        return points, labels
     else:
         print(f"[WARNING] No new point prompts found")
         # visualize_luminance_prompts(frame, l, dark_regions, [[[0, 0]]], luminance_threshold)

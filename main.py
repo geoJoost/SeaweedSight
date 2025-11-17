@@ -55,8 +55,8 @@ def process_video_directory(
             # Unpack prompts for this frame
             current_points = all_outputs[frame_idx]['points']
             current_labels = all_outputs[frame_idx]['labels']
-            current_logits = all_outputs[frame_idx]['logits']
-            current_masks = all_outputs[frame_idx]['masks']
+            # current_logits = all_outputs[frame_idx]['logits']
+            # current_masks = all_outputs[frame_idx]['masks'][frame_idx] # Second idx corresponds to the objectID. No tracking in current implementation
 
             # Calculate surface area (in px)
             surface_area, binarized_mask = calculate_surface_area(probs.squeeze(), conf_threshold)
@@ -70,12 +70,12 @@ def process_video_directory(
                 feature_data[key].append(color_features[key])
 
             # Save visualization for each frame
+            # Save visualization for each frame
             visualize_sam2_outputs(
                 data_dir,
                 video_frames,
                 current_points,
-                current_logits,
-                current_masks,
+                probs,
                 frame_idx=frame_idx,
                 data_dir=data_dir,
                 output_folder=output_folder,
@@ -112,20 +112,24 @@ def process_video_directory(
     print('[INFO] Code finished...')
 
 
+# Define data folders
 data_dirs = [
     "data/Ulva_05_1_trial1",
-    "data/Ulva_05_1_trial2",
-    "data/Ulva_05_1_trial3",
+    # "data/Ulva_05_1_trial2",
+    # "data/Ulva_05_1_trial3",
     "data/Ulva_10_1_trial1",
-    "data/Ulva_10_1_trial2",
-    "data/Ulva_10_1_trial3"
+    # "data/Ulva_10_1_trial2",
+    # "data/Ulva_10_1_trial3",
+    "data/Ulva_15_1_trial1",
+    "data/Ulva_20_3_trial1",
+    "data/Ulva_25_3_trial1"
 ]
 
 process_video_directory(
     data_dirs=data_dirs,
-    # model_name="facebook/sam2-hiera-base-plus",
-    model_name='facebook/sam-vit-huge',
+    model_name="facebook/sam2-hiera-base-plus",
+    # model_name='facebook/sam-vit-huge',
     conf_threshold=0.5,
     output_folder="data/processed",
-    max_frames=50,
+    max_frames=30,
 )

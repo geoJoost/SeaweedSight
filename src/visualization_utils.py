@@ -37,6 +37,9 @@ def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_thresh
 
     # 3. Dark regions mask
     axes[2].imshow(dark_regions, cmap='gray')
+    for point in points:
+        axes[2].add_patch(Circle((point[0][0], point[0][1]), 10, color='green', fill=True))
+        # axes[2].add_patch(Circle((point[0][0], point[0][1]), 10, color='white', fill=False, lw=2))
     axes[2].set_title(f"Dark regions (L < {luminance_threshold})")
 
     # 4. Connected components
@@ -46,19 +49,17 @@ def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_thresh
 
     # Annotate
     fig.text(0.5, 0.01,
-             f"Threshold: L < {luminance_threshold}\n"
-             f"Selected {len(points)} prompts: {points}",
+             f"Threshold: L < {luminance_threshold}\n",
+            #  f"Selected {len(points)} prompts: {points}",
              ha='center', fontsize=10)
 
     # plt.tight_layout()
     plt.savefig(output_path, dpi=200, bbox_inches='tight')
     plt.close()
 
-    print(f"[INFO] Saved debug figure to: {output_path}")
-    print(f"[INFO] Points: {points}")
-    print(f"[INFO] Dark region pixels: {np.sum(dark_regions)}")
+    print(f"[INFO] Saved figure to: {output_path}")
 
-def visualize_sam2_outputs(input_path, video_frames, points, logits, masks, frame_idx, data_dir, output_folder, conf_threshold=0.5):
+def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, frame_idx, data_dir, output_folder, conf_threshold=0.5):
     # Create output directory
     output_dir = os.path.join(output_folder, f"{os.path.basename(data_dir)}_processed")
     os.makedirs(output_dir, exist_ok=True)
@@ -67,7 +68,7 @@ def visualize_sam2_outputs(input_path, video_frames, points, logits, masks, fram
     frame = video_frames[frame_idx]
 
     # Combine masks for all objects into a single mask
-    binarized_mask = (logits > conf_threshold).to(torch.uint8) * 255
+    binarized_mask = (video_res_masks > conf_threshold).to(torch.uint8) * 255
     binarized_mask = binarized_mask.cpu().squeeze().numpy()
 
     # Create figure
@@ -75,21 +76,21 @@ def visualize_sam2_outputs(input_path, video_frames, points, logits, masks, fram
 
     # Plot original image with point annotation
     axes[0].imshow(frame)
-    for point in points[0][0]:
-        plt.gca().add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
-        plt.gca().add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=2))
+    for obj_points in points:
+        for point in obj_points:
+            plt.gca().add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
+            plt.gca().add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=2))
     axes[0].set_title('Image with prompt')
     axes[0].axis('off')
 
     # Plot mask probabilities
     #axes[1].imshow(frame)
-    axes[1].imshow(logits.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
+    axes[1].imshow(video_res_masks.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
     axes[1].set_title('Confidence')
     axes[1].axis('off')
 
     # Plot binarized mask
-    # axes[2].imshow(binarized_mask, cmap='gray')
-    axes[2].imshow(masks.squeeze(), cmap='gray')
+    axes[2].imshow(binarized_mask, cmap='gray')
     axes[2].set_title('Prediction')
     axes[2].axis('off')
 
