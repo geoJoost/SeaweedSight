@@ -4,7 +4,7 @@ import os
 import glob
 
 # Custom imports
-from src.sam_prompter import prompt_sam2, segment_frames_sam2
+from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam2_outputs, visualize_features
 from src.data_exploration import plot_features_vs_density
@@ -41,10 +41,13 @@ def process_video_directory(
         df['density'] = extract_density_from_dir(data_dir)
 
         # Prompt SAM2 for video processing
-        # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames)
+        # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
         # Prompt SAM2 for semantic segmentation per-frame
-        video_frames, probs_stack, all_outputs = segment_frames_sam2(data_dir, model_name, max_frames)
+        # video_frames, probs_stack, all_outputs = segment_frames_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
+
+        # Prompt SAM2 for semantic segmentation per-frame
+        video_frames, probs_stack, all_outputs = segment_frames_sam1(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=15)
 
         # Pre-allocate lists for all features
         feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
@@ -115,21 +118,27 @@ def process_video_directory(
 # Define data folders
 data_dirs = [
     "data/Ulva_05_1_trial1",
-    # "data/Ulva_05_1_trial2",
-    # "data/Ulva_05_1_trial3",
+    "data/Ulva_05_1_trial2",
+    "data/Ulva_05_1_trial3",
     "data/Ulva_10_1_trial1",
-    # "data/Ulva_10_1_trial2",
-    # "data/Ulva_10_1_trial3",
+    "data/Ulva_10_1_trial2",
+    "data/Ulva_10_1_trial3",
     "data/Ulva_15_1_trial1",
+    "data/Ulva_15_1_trial2",
+    "data/Ulva_15_1_trial3",
     "data/Ulva_20_3_trial1",
-    "data/Ulva_25_3_trial1"
+    "data/Ulva_20_3_trial3",
+    "data/Ulva_20_3_trial2",
+    "data/Ulva_25_3_trial1",
+    "data/Ulva_20_3_trial2",
+    "data/Ulva_20_3_trial3",
 ]
 
 process_video_directory(
     data_dirs=data_dirs,
-    model_name="facebook/sam2-hiera-base-plus",
+    model_name="facebook/sam2.1-hiera-base-plus",
     # model_name='facebook/sam-vit-huge',
     conf_threshold=0.5,
     output_folder="data/processed",
-    max_frames=30,
+    max_frames=50,
 )

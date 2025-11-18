@@ -99,7 +99,7 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
         labels = [[1] for _ in range(len(points))]
 
         # Visualize steps used to create point prompts
-        # visualize_luminance_prompts(frame, l, dark_regions, points, luminance_percentile)
+        visualize_luminance_prompts(frame, g, dark_regions, points, luminance_percentile)
 
         return points, labels
     else:

@@ -14,7 +14,7 @@ from src.data_utils import load_video_frames, create_luminance_prompts
 from src.visualization_utils import visualize_sam2_outputs, visualize_luminance_prompts
 
 """ Used for semantic/instance segmentation on video data """
-def prompt_sam2(data_dir, model_name, max_frames=None):
+def prompt_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device: use CUDA if available, else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -41,7 +41,7 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
 
     # Automatically prompt the first frame
     first_frame = video_frames[0]
-    points, labels = create_luminance_prompts(first_frame, num_prompts=5, luminance_percentile=10)
+    points, labels = create_luminance_prompts(first_frame, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
     obj_ids = [1, 2, 3, 4, 5]  # Start with object IDs 1 and 2
 
     # Inputs into processor
@@ -84,8 +84,8 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
             # Select new prompts
             new_points, new_labels = create_luminance_prompts(video_frames[frame_idx], 
                                                     existing_masks=current_masks, 
-                                                    num_prompts=5, 
-                                                    luminance_percentile=10
+                                                    num_prompts=num_prompts, 
+                                                    luminance_percentile=luminance_percentile
                                                     )
 
             # Assign new object IDS
@@ -135,7 +135,7 @@ def prompt_sam2(data_dir, model_name, max_frames=None):
 
     return video_frames, probs_stack, all_logits
 
-def segment_frames_sam1(data_dir, model_name, max_frames=None):
+def segment_frames_sam1(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -158,7 +158,7 @@ def segment_frames_sam1(data_dir, model_name, max_frames=None):
     # Segment each image individually (i.e., not treated as video for SAM2)
     for frame_idx, pil_image in enumerate(video_frames_inference):
         # Create prompts
-        points, labels = create_luminance_prompts(pil_image, num_prompts=5, luminance_percentile=10)
+        points, labels = create_luminance_prompts(pil_image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
 
         # # Convert to tensor and explicitly cast to bfloat16
         # import torchvision.transforms.functional as TF
@@ -197,49 +197,6 @@ def segment_frames_sam1(data_dir, model_name, max_frames=None):
             binarize=True
         )[0]
 
-        def plot_results(pil_image, points_tensor, masks, logits):
-            # Convert PIL image to numpy array
-            image_np = np.array(pil_image)
-
-
-            # Squeeze and detach tensors for plotting
-            logits_np = logits.to(torch.float32).squeeze().cpu().numpy()
-            masks_np = masks.squeeze().cpu().numpy()
-
-            # Create figure with 4 subplots
-            fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-
-            # 1. Original image with point prompts
-            axes[0].imshow(image_np)
-            points = points_tensor.squeeze().cpu().numpy()  # Shape: [10, 2]
-            axes[0].scatter(points[:, 0], points[:, 1], c='red', s=50)
-            axes[0].set_title('Original Image with Prompts')
-            axes[0].axis('off')
-
-            # 2. Logits
-            axes[1].imshow(logits_np, cmap='viridis')
-            axes[1].set_title('Logits')
-            axes[1].axis('off')
-
-            # 3. Mask
-            axes[2].imshow(masks_np, cmap='gray')
-            axes[2].set_title('Mask')
-            axes[2].axis('off')
-
-            # 4. Masks overlaid on the original image
-            overlay = image_np.copy()
-            overlay[masks_np > 0.5] = [255, 0, 0]  # Overlay mask in red
-            axes[3].imshow(overlay)
-            axes[3].set_title('Mask Overlay')
-            axes[3].axis('off')
-
-            plt.tight_layout()
-            plt.savefig('doc/sam_results.png', dpi=200, bbox_inches='tight')
-            plt.close(fig)
-
-        # plot_results(pil_image, points_tensor, masks, logits)
-
-
         all_outputs[frame_idx] = {
             'logits': logits, # Store full logits tensor for all objects
             'masks': masks,
@@ -258,7 +215,7 @@ def segment_frames_sam1(data_dir, model_name, max_frames=None):
 
     return video_frames, probs_stack, all_outputs
 
-def segment_frames_sam2(data_dir, model_name, max_frames=None):
+def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -279,7 +236,7 @@ def segment_frames_sam2(data_dir, model_name, max_frames=None):
     # Segment each image individually (i.e., not treated as video for SAM2)
     for frame_idx, pil_image in enumerate(video_frames_inference):
         # Create prompts
-        points, labels = create_luminance_prompts(pil_image, num_prompts=5, luminance_percentile=10)
+        points, labels = create_luminance_prompts(pil_image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
 
         # # Convert to tensor and explicitly cast to bfloat16
         # import torchvision.transforms.functional as TF
@@ -317,49 +274,6 @@ def segment_frames_sam2(data_dir, model_name, max_frames=None):
             # inputs["reshaped_input_sizes"],
             binarize=True
         )[0]
-
-        def plot_results(pil_image, points_tensor, masks, logits):
-            # Convert PIL image to numpy array
-            image_np = np.array(pil_image)
-
-
-            # Squeeze and detach tensors for plotting
-            logits_np = logits.to(torch.float32).squeeze().cpu().numpy()
-            masks_np = masks.squeeze().cpu().numpy()
-
-            # Create figure with 4 subplots
-            fig, axes = plt.subplots(1, 4, figsize=(20, 5))
-
-            # 1. Original image with point prompts
-            axes[0].imshow(image_np)
-            points = points_tensor.squeeze().cpu().numpy()  # Shape: [10, 2]
-            axes[0].scatter(points[:, 0], points[:, 1], c='red', s=50)
-            axes[0].set_title('Original Image with Prompts')
-            axes[0].axis('off')
-
-            # 2. Logits
-            axes[1].imshow(logits_np, cmap='viridis')
-            axes[1].set_title('Logits')
-            axes[1].axis('off')
-
-            # 3. Mask
-            axes[2].imshow(masks_np, cmap='gray')
-            axes[2].set_title('Mask')
-            axes[2].axis('off')
-
-            # 4. Masks overlaid on the original image
-            overlay = image_np.copy()
-            overlay[masks_np > 0.5] = [255, 0, 0]  # Overlay mask in red
-            axes[3].imshow(overlay)
-            axes[3].set_title('Mask Overlay')
-            axes[3].axis('off')
-
-            plt.tight_layout()
-            plt.savefig('doc/sam_results.png', dpi=200, bbox_inches='tight')
-            plt.close(fig)
-
-        # plot_results(pil_image, points_tensor, masks, logits)
-
 
         all_outputs[frame_idx] = {
             'logits': logits, # Store full logits tensor for all objects

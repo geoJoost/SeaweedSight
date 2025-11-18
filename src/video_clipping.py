@@ -3,6 +3,109 @@
 
 import cv2
 import os
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+def calculate_dynamic_roi(frame, roi_width, roi_height):
+    height, width = frame.shape[:2]
+
+    # Center the ROI horizontally
+    roi_x = max(0, (width - roi_width) // 2)
+    roi_y = 0  # Align to the top
+
+    # Ensure ROI fits within the frame
+    roi_width = min(roi_width, width - roi_x)
+    roi_height = min(roi_height, height - roi_y)
+
+    return roi_x, roi_y, roi_width, roi_height
+
+def find_smallest_roi(video_configs):
+    """
+    Find the smallest ROI (Region of Interest) across all videos.
+    Assumes the ROI is centered horizontally and aligned to the top vertically.
+    """
+    min_width = float('inf')
+    min_height = float('inf')
+    original_widths = []
+
+    for video_path, keep_ranges in video_configs.items():
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"[ERROR] Could not open video: {video_path}")
+            continue
+
+        # Get FPS of the video
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        # Get video dimensions
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f"[INFO] {os.path.basename(video_path)}: {width} x {height} | FPS: {fps:.2f}")
+
+        # Store the original width for ROI calculation
+        if width not in original_widths:
+            original_widths.append(width)
+
+        # Update smallest dimensions
+        if width < min_width:
+            min_width = width
+        if height < min_height:
+            min_height = height
+
+        cap.release()
+
+    # Calculate ROI coordinates
+    roi_width = min_width
+    roi_height = min_height
+
+    print(f"[INFO] Smallest ROI: width={roi_width}, height={roi_height}")
+    return roi_width, roi_height
+
+def verify_roi(frame, roi):
+    """
+    Verify the ROI by plotting:
+    1. Original full-frame
+    2. Original full-frame with ROI overlaid as a red box
+    3. Final clipped frame
+
+    Args:
+        frame (numpy.ndarray): The frame to visualize.
+        roi (tuple): ROI coordinates (roi_x, roi_y, roi_width, roi_height).
+    """
+    roi_x, roi_y, roi_width, roi_height = roi
+
+    # Convert BGR frame to RGB for matplotlib
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Clip the frame to the ROI
+    clipped_frame_rgb = frame_rgb[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
+
+    # Create the figure and subplots
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+
+    # Subplot 1: Original full-frame
+    axes[0].imshow(frame_rgb)
+    axes[0].set_title('Original Full-Frame')
+    axes[0].axis('off')
+
+    # Subplot 2: Original full-frame with ROI overlaid
+    axes[1].imshow(frame_rgb)
+    rect = patches.Rectangle(
+        (roi_x, roi_y), roi_width, roi_height,
+        linewidth=2, edgecolor='r', facecolor='none'
+    )
+    axes[1].add_patch(rect)
+    axes[1].set_title('Original with ROI Overlay')
+    axes[1].axis('off')
+
+    # Subplot 3: Final clipped frame
+    axes[2].imshow(clipped_frame_rgb)
+    axes[2].set_title('Clipped frame')
+    axes[2].axis('off')
+
+    plt.tight_layout()
+    plt.savefig('doc/clipped_frame.png')
+    plt.close()
 
 def process_video_to_frames(
     input_path: str,
@@ -92,6 +195,7 @@ def process_video_n_frames(
     input_path: str,
     n_frames: int = 175,
     keep_ranges: list = None,
+    roi: tuple = None,
     output_dir: str = "data"
 ) -> None:
     """
@@ -105,24 +209,34 @@ def process_video_n_frames(
         input_path: Path to the input .avi file.
         n_frames: Save a frame every `n_frames` frames (default: 175).
         keep_ranges: List of frame ranges to keep (e.g., [(104, 2450), (2551, 4919), (5001, None)])
+        roi:
         output_dir: Base directory to save frames (default: "data").
     """
     if keep_ranges is None:
         keep_ranges = []
+    
+    if roi is None:
+        roi = (None, None)  # Default: no clipping
+    roi_width, roi_height = roi
 
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         raise ValueError("Error: Could not open video.")
 
+    # Extract footage parameters
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"[INFO] Total of {total_frames:,} frames found in {input_path}")
 
+    # Create output directories
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     trial_dirs = [os.path.join(output_dir, f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
-
     for d in trial_dirs:
         os.makedirs(d, exist_ok=True)
 
+    # Tracking variables
     frame_count = 0
     current_trial = 0
     frame_number = 0
@@ -148,8 +262,18 @@ def process_video_n_frames(
 
         # Save a frame every `n_frames` frames
         if frame_count % n_frames == 0:
+            # Calculate dynamic ROI for this frame, so it is horizontally centered
+            roi_x, roi_y, roi_width, roi_height = calculate_dynamic_roi(frame, roi_width, roi_height)
+
+            # Clip the frame to the ROI
+            clipped_frame = frame[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
+
+            # Visualize results
+            # verify_roi(frame, roi) # For debugging
+
+            # Save the clipped frame
             frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
-            cv2.imwrite(frame_path, frame)
+            cv2.imwrite(frame_path, clipped_frame)
             frame_number += 1
 
         frame_count += 1
@@ -172,10 +296,12 @@ video_configs = {
 
     }
 
+# Find the smallest ROI
+roi_width, roi_height = find_smallest_roi(video_configs)
 
 # Split video into individual trials
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
-    # process_video_n_frames(input_video, n_frames=175, keep_ranges=keep_ranges)
+    process_video_n_frames(input_video, n_frames=175, keep_ranges=keep_ranges, roi=(roi_width, roi_height))
 
-    process_video_to_frames(input_video, frames_per_second=2, keep_ranges=keep_ranges) # Old function
+    # process_video_to_frames(input_video, frames_per_second=2, keep_ranges=keep_ranges) # Old function
