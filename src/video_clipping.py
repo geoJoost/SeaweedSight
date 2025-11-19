@@ -2,6 +2,7 @@
 """
 
 import cv2
+import numpy as np
 import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -107,6 +108,169 @@ def verify_roi(frame, roi):
     plt.savefig('doc/clipped_frame.png')
     plt.close()
 
+
+def get_master_stats(
+    master_path: str,
+    roi_width: int,
+    roi_height: int,
+    normalization_area: tuple,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute mean and std of the normalization_area across all frames of the master video.
+    Optionally plots a sample frame with the normalization_area overlaid.
+
+    Args:
+        master_path (str): Path to the master .avi file.
+        roi_width (int): Width of the ROI.
+        roi_height (int): Height of the ROI.
+        normalization_area (tuple): (x, y, w, h) relative to the clipped ROI.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Global mean and std of the normalization_area (BGR order).
+    """
+    cap = cv2.VideoCapture(master_path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open master video: {master_path}")
+
+    # List to accumulate all pixel values in the normalization_area
+    pixels_list = [[] for _ in range(3)]  # B, G, R
+
+    frame_idx = 0
+    sample_frame = None
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Clip frame to ROI
+        roi_x, roi_y, _, _ = calculate_dynamic_roi(frame, roi_width, roi_height)
+        clipped_frame = frame[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
+
+        # Extract normalization_area
+        x, y, w, h = normalization_area
+        area = clipped_frame[y:y+h, x:x+w]
+
+        # Accumulate pixel values for each channel
+        for i in range(3):
+            pixels_list[i].extend(area[:, :, i].flatten())
+
+        frame_idx += 1
+        
+        sample_frame = frame.copy()
+
+    cap.release()
+
+
+    # Convert lists to NumPy arrays
+    pixels_array = [np.array(channel) for channel in pixels_list]
+
+    # Compute global mean and std for each channel
+    global_mean = np.array([np.mean(channel) for channel in pixels_array])
+    global_std = np.array([np.std(channel) for channel in pixels_array])
+
+    print(
+        f"Pixels in normalization_area for each channel: {pixels_array[0].shape[0]:,}\n"
+        f"B: μ={global_mean[0]:.2f}, σ={global_std[0]:.2f}\n"
+        f"G: μ={global_mean[1]:.2f}, σ={global_std[1]:.2f}\n"
+        f"R: μ={global_mean[2]:.2f}, σ={global_std[2]:.2f}"
+    )
+
+    # Plot sample frame
+    sample_frame_rgb = cv2.cvtColor(sample_frame, cv2.COLOR_BGR2RGB)
+    plt.figure(figsize=(6, 6))
+    plt.imshow(sample_frame_rgb)
+    rect = patches.Rectangle(
+        (x, y), w, h,
+        linewidth=2, edgecolor='r', facecolor='none'
+    )
+    plt.gca().add_patch(rect)
+    plt.title(f"Sample Frame with ormalization rea")
+    plt.axis('off')
+    plt.savefig('doc/video_normalization.png')
+    plt.close()
+
+    return global_mean, global_std
+
+
+def normalize_frame(
+    frame: np.ndarray,
+    master_mean: np.ndarray,
+    master_std: np.ndarray,
+    normalization_area: tuple,
+) -> np.ndarray:
+    """
+    Normalize a frame (in BGR) so that the normalization_area matches the master's mean and std.
+    """
+    frame = frame.copy() # Work on a copy
+    x, y, w, h = normalization_area
+    current_area = frame[y:y+h, x:x+w, :]
+
+    # Calculate current mean and std for each channel
+    current_mean = np.mean(current_area, axis=(0, 1))
+    current_std = np.std(current_area, axis=(0, 1))
+
+    # Avoid division by zero
+    current_std[current_std == 0] = 1
+
+    # Normalize each channel
+    for i in range(frame.shape[-1]):  # R, G, B
+        frame[:, :, i] = (
+            # Scale data based on normalization_area taken from master frame
+            # And the current channel statistics
+            ((frame[:, :, i] - current_mean[i]) * (master_std[i] / current_std[i]))
+            + master_mean[i]
+        )
+
+    return np.clip(frame, 0, 255).astype(np.uint8)
+
+def verify_normalization(
+    original_frame: np.ndarray,
+    normalized_frame: np.ndarray,
+    normalization_area: tuple,
+) -> None:
+    """
+    Plot the original and normalized frames with the normalization_area overlaid for verification.
+
+    Args:
+        original_frame (np.ndarray): Original frame (RGB).
+        normalized_frame (np.ndarray): Normalized frame (RGB).
+        normalization_area (tuple): (x, y, w, h) coordinates of the normalization area.
+        title (str): Title for the plot (default: "Normalization Verification").
+    """
+    x, y, w, h = normalization_area
+
+    # Convert BGR to RGB for plotting
+    original_rgb = cv2.cvtColor(original_frame, cv2.COLOR_BGR2RGB)
+    normalized_rgb = cv2.cvtColor(normalized_frame, cv2.COLOR_BGR2RGB)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Plot original frame with normalization_area
+    axes[0].imshow(original_rgb)
+    rect_orig = patches.Rectangle(
+        (x, y), w, h,
+        linewidth=2, edgecolor='r', facecolor='none'
+    )
+    axes[0].add_patch(rect_orig)
+    axes[0].set_title('Original Frame\n(Red: Normalization Area)')
+    axes[0].axis('off')
+
+    # Plot normalized frame with normalization_area
+    axes[1].imshow(normalized_rgb)
+    rect_norm = patches.Rectangle(
+        (x, y), w, h,
+        linewidth=2, edgecolor='r', facecolor='none'
+    )
+    axes[1].add_patch(rect_norm)
+    axes[1].set_title('Normalized Frame\n(Red: Normalization Area)')
+    axes[1].axis('off')
+
+    plt.suptitle("Normalization")
+    plt.tight_layout()
+    plt.savefig('doc/video_normalization_verification.png')
+    plt.close()
+
 def process_video_to_frames(
     input_path: str,
     frames_per_second: int = 1,
@@ -196,6 +360,10 @@ def process_video_n_frames(
     n_frames: int = 175,
     keep_ranges: list = None,
     roi: tuple = None,
+    normalize: bool = False,
+    normalization_area: tuple = None,
+    master_mean: np.ndarray = None,
+    master_std: np.ndarray = None,
     output_dir: str = "data"
 ) -> None:
     """
@@ -203,14 +371,19 @@ def process_video_n_frames(
     - Saves 1 frame every `n_frames` frames.
     - Removes specified frame ranges.
     - Splits the result into parts based on the keep ranges.
+    - Optionally normalizes frames to match a master's color distribution.
     - Saves frames as .jpg in folders: data/Ulva_DENSITY_1_trial1/, etc.
 
     Args:
-        input_path: Path to the input .avi file.
-        n_frames: Save a frame every `n_frames` frames (default: 175).
-        keep_ranges: List of frame ranges to keep (e.g., [(104, 2450), (2551, 4919), (5001, None)])
-        roi:
-        output_dir: Base directory to save frames (default: "data").
+        input_path (str): Path to the input .avi file.
+        n_frames (int): Save a frame every `n_frames` frames (default: 175).
+        keep_ranges (list): List of frame ranges to keep (e.g., [(104, 2450), (2551, 4919), (5001, None)]).
+        roi (tuple): Target ROI dimensions as (width, height).
+        normalize (bool): If True, normalize frames using master_mean and master_std (default: False).
+        normalization_area (tuple): Coordinates (x, y, w, h) of the area to use for normalization, relative to the clipped ROI.
+        master_mean (np.ndarray): Mean RGB values of the master's normalization_area.
+        master_std (np.ndarray): Standard deviation of RGB values of the master's normalization_area.
+        output_dir (str): Base directory to save frames (default: "data").
     """
     if keep_ranges is None:
         keep_ranges = []
@@ -271,6 +444,17 @@ def process_video_n_frames(
             # Visualize results
             # verify_roi(frame, roi) # For debugging
 
+            if normalize:
+                normalized_frame = normalize_frame(
+                    clipped_frame.copy(), # BGR
+                    master_mean,
+                    master_std,
+                    normalization_area,
+                )
+
+                verify_normalization(clipped_frame.copy(), normalized_frame, normalization_area)
+                clipped_frame = normalized_frame # Overwrite to keep existing code functional without normalization
+
             # Save the clipped frame
             frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
             cv2.imwrite(frame_path, clipped_frame)
@@ -283,7 +467,6 @@ def process_video_n_frames(
 
 ## TODO's ##
 # TODO: Find exact frames using DaVinci
-# TODO: Implement proper ROI for all videos
 # TODO: Take correct number of frames based on the FPS used (i.e., 15 vs 30 fps)
 # TODO: At 0.5G/L, more than three trials are made
 
@@ -299,9 +482,21 @@ video_configs = {
 # Find the smallest ROI
 roi_width, roi_height = find_smallest_roi(video_configs)
 
+# Get normalization statistics for colour correction
+normalization_area = (150, 35, 100, 50)
+master_mean, master_std = get_master_stats(r"data/Ducks/Ulva_05_1.avi", roi_width, roi_height, normalization_area)
+
 # Split video into individual trials
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
-    process_video_n_frames(input_video, n_frames=175, keep_ranges=keep_ranges, roi=(roi_width, roi_height))
+    process_video_n_frames(input_video, 
+                           n_frames=175, 
+                           keep_ranges=keep_ranges, 
+                           roi=(roi_width, roi_height),
+                           normalize=True,
+                           normalization_area=normalization_area,
+                           master_mean=master_mean,
+                           master_std=master_std
+                           )
 
     # process_video_to_frames(input_video, frames_per_second=2, keep_ranges=keep_ranges) # Old function
