@@ -381,6 +381,7 @@ def process_video_n_frames(
     normalization_area: tuple = None,
     master_mean: np.ndarray = None,
     master_std: np.ndarray = None,
+    save_files: bool = False,
     output_dir: str = "data"
 ) -> None:
     """
@@ -400,6 +401,7 @@ def process_video_n_frames(
         normalization_area (tuple): Coordinates (x, y, w, h) of the area to use for normalization, relative to the clipped ROI.
         master_mean (np.ndarray): Mean RGB values of the master's normalization_area.
         master_std (np.ndarray): Standard deviation of RGB values of the master's normalization_area.
+        save_jpg (bool): If True, saves frames as .jpg (default: True).
         output_dir (str): Base directory to save frames (default: "data").
     """
     if keep_ranges is None:
@@ -425,7 +427,7 @@ def process_video_n_frames(
     
     # Create output directories
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    trial_dirs = [os.path.join(output_dir, f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
+    trial_dirs = [os.path.join(output_dir, "intermediate", f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
     for d in trial_dirs:
         os.makedirs(d, exist_ok=True)
 
@@ -433,6 +435,7 @@ def process_video_n_frames(
     frame_count = 0
     current_trial = 0
     frame_number = 0
+    trial_frames = {f"{base_name}_trial{i+1}": [] for i in range(len(keep_ranges))} # Store arrays for downstream inference
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -464,6 +467,7 @@ def process_video_n_frames(
             # Visualize results
             # verify_roi(frame, roi) # For debugging
 
+            # Normalize frames to account for different illumination situations (i.e., decrease in sunlight)
             if normalize:
                 # normalized_frame = normalize_frame(
                 #     clipped_frame.copy(), # BGR
@@ -475,51 +479,57 @@ def process_video_n_frames(
                 normalized_frame = normalize_clipped_frame(clipped_frame.copy(), master_mean, master_std)
 
                 # verify_normalization(clipped_frame.copy(), normalized_frame, normalization_area)
-                clipped_frame = normalized_frame # Overwrite to keep existing code functional without normalization
-
-            # Save the clipped frame
-            frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
-            cv2.imwrite(frame_path, clipped_frame)
+                clipped_frame = normalized_frame.copy() # Overwrite to keep existing code functional without normalization
+            
+            # Save the frame to folder
+            if save_files:
+                frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
+                cv2.imwrite(frame_path, clipped_frame)
+            
+            trial_frames[f"{base_name}_trial{current_trial+1}"].append(clipped_frame.copy())
             frame_number += 1
 
         frame_count += 1
 
     cap.release()
-    print(f"[INFO] Frames saved in: {', '.join(trial_dirs)}")
+    print(f"[INFO] Finished processing of {input_path}")
+    if save_files:
+        print(f"[INFO] Frames saved in: {', '.join(trial_dirs)}")
+    return trial_frames
 
 ## TODO's ##
 # TODO: Find exact frames using DaVinci
-# TODO: Take correct number of frames based on the FPS used (i.e., 15 vs 30 fps)
 # TODO: At 0.5G/L, more than three trials are made
 
-video_configs = {
-    r"data/Ducks/Ulva_05_1.avi": [(204, 3980), (4090, 9236), (9489, 13285)],
-    r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
-    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
-    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+# video_configs = {
+#     r"data/Ducks/Ulva_05_1.avi": [(204, 3980), (4090, 9236), (9489, 13285)],
+#     r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
+#     r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+#     r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+#     r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+#     }
 
-    }
+# # Find the smallest ROI
+# roi_width, roi_height = find_smallest_roi(video_configs)
 
-# Find the smallest ROI
-roi_width, roi_height = find_smallest_roi(video_configs)
+# # Get normalization statistics for colour correction
+# # normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
+# normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
+# master_mean, master_std = get_master_stats(r"data/Ducks/Duck1.avi", roi_width, roi_height, normalization_area)
 
-# Get normalization statistics for colour correction
-# normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
-normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
-master_mean, master_std = get_master_stats(r"data/Ducks/Duck1.avi", roi_width, roi_height, normalization_area)
+# # Split video into individual trials
+# for input_video, keep_ranges in video_configs.items():
+#     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
 
-# Split video into individual trials
-for input_video, keep_ranges in video_configs.items():
-    print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
-    process_video_n_frames(input_video, 
-                           seconds_interval=8.0, #n_frames=175, 
-                           keep_ranges=keep_ranges, 
-                           roi=(roi_width, roi_height),
-                           normalize=True,
-                           normalization_area=normalization_area,
-                           master_mean=master_mean,
-                           master_std=master_std
-                           )
+    
+#     process_video_n_frames(input_video, 
+#                            seconds_interval=8.0, #n_frames=175, 
+#                            keep_ranges=keep_ranges, 
+#                            roi=(roi_width, roi_height),
+#                            normalize=True,
+#                            normalization_area=normalization_area,
+#                            master_mean=master_mean,
+#                            master_std=master_std
+#                            )
 
     # process_video_to_frames(input_video, frames_per_second=2, keep_ranges=keep_ranges) # Old function

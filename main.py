@@ -8,9 +8,11 @@ from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sa
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam2_outputs, visualize_features
 from src.data_exploration import plot_features_vs_density
+from src.video_clipping import *
 
 def process_video_directory(
-    data_dirs,
+    # data_dirs,
+    trial_frames_dict,
     model_name="facebook/sam2-hiera-base-plus",
     conf_threshold=0.5,
     output_folder="data/processed",
@@ -30,15 +32,17 @@ def process_video_directory(
     os.makedirs(output_folder, exist_ok=True)
 
     # Process each directory
-    for data_dir in data_dirs:
-        print(f"[INFO] Processing directory: {data_dir}")
+    # for data_dir in data_dirs:
+    for trial_name, frames in trial_frames_dict.items():
+        print(f"[INFO] Processing trial:: {trial_name}")
 
         # Initialize DataFrame for this directory
         df = pd.DataFrame()
-        df['frame_path'] = get_frame_paths(data_dir)[:max_frames] if max_frames else get_frame_paths(data_dir)
-        df['frame_id'] = df['frame_path'].apply(lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        # df['frame_path'] = get_frame_paths(data_dir)[:max_frames] if max_frames else get_frame_paths(data_dir)
+        # df['frame_id'] = df['frame_path'].apply(lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+        df['frame_id'] = list(range(len(frames)))
         df[['model_name', 'conf_threshold']] = model_name, conf_threshold
-        df['density'] = extract_density_from_dir(data_dir)
+        df['density'] = extract_density_from_dir(trial_name)
 
         # Prompt SAM2 for video processing
         # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
@@ -47,7 +51,7 @@ def process_video_directory(
         # video_frames, probs_stack, all_outputs = segment_frames_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
         # Prompt SAM2 for semantic segmentation per-frame
-        video_frames, probs_stack, all_outputs = segment_frames_sam1(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=15)
+        video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, model_name, max_frames, num_prompts=5, luminance_percentile=15)
 
         # Pre-allocate lists for all features
         feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
@@ -75,12 +79,12 @@ def process_video_directory(
             # Save visualization for each frame
             # Save visualization for each frame
             visualize_sam2_outputs(
-                data_dir,
+                trial_name,
                 video_frames,
                 current_points,
                 probs,
                 frame_idx=frame_idx,
-                data_dir=data_dir,
+                data_dir=trial_name,
                 output_folder=output_folder,
                 conf_threshold=conf_threshold
             )
@@ -93,13 +97,13 @@ def process_video_directory(
         df['cumulative_surface_area'] = np.cumsum(df['surface_area'])
 
         # Create visualization of features over entire timeseries
-        visualize_features(df, conf_threshold, data_dir, output_dir=output_folder)
+        visualize_features(df, conf_threshold, trial_name, output_dir=output_folder)
 
         # Save .csv for downstream processes
-        output_path = f"{os.path.basename(data_dir)}_processed.csv"
+        output_path = f"{os.path.basename(trial_name)}_processed.csv"
         df.to_csv(os.path.join(output_folder, output_path), index=False)
 
-        print(f"[INFO] Saved processed data for {data_dir} to: {output_path}")
+        print(f"[INFO] Saved processed data for {trial_name} to: {output_path}")
     
     # Combine all CSV's
     csv_files = glob.glob(os.path.join(output_folder,'*.csv'))
@@ -114,28 +118,50 @@ def process_video_directory(
 
     print('[INFO] Code finished...')
 
+## Video to frames preperation ##
+video_configs = {
+    r"data/Ducks/Ulva_05_1.avi": [(204, 3980), (4090, 9236), (9489, 13285)],
+    r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
+    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    }
 
-# Define data folders
-data_dirs = [
-    "data/Ulva_05_1_trial1",
-    "data/Ulva_05_1_trial2",
-    "data/Ulva_05_1_trial3",
-    "data/Ulva_10_1_trial1",
-    "data/Ulva_10_1_trial2",
-    "data/Ulva_10_1_trial3",
-    "data/Ulva_15_1_trial1",
-    "data/Ulva_15_1_trial2",
-    "data/Ulva_15_1_trial3",
-    "data/Ulva_20_3_trial1",
-    "data/Ulva_20_3_trial3",
-    "data/Ulva_20_3_trial2",
-    "data/Ulva_25_3_trial1",
-    "data/Ulva_20_3_trial2",
-    "data/Ulva_20_3_trial3",
-]
+# Find the smallest ROI
+roi_width, roi_height = find_smallest_roi(video_configs)
 
+# Get normalization statistics for colour correction
+# normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
+normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
+master_mean, master_std = get_master_stats(r"data/Ducks/Ulva_05_1.avi", roi_width, roi_height, normalization_area)
+
+# Split video into individual trials
+all_trial_frames = {}
+for input_video, keep_ranges in video_configs.items():
+    print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
+
+    # Process .avi
+    trial_frames = process_video_n_frames(input_video, # .avi file
+                           # Frame specificatrions
+                           seconds_interval=8.0,
+                           keep_ranges=keep_ranges, 
+                           roi=(roi_width, roi_height),
+
+                           # Normalization parameters
+                           normalize=True,
+                           normalization_area=normalization_area,
+                           master_mean=master_mean,
+                           master_std=master_std,
+
+                           # Save frames
+                           save_files=True
+                           )
+    all_trial_frames.update(trial_frames)
+
+## Semantic segmentation ##
 process_video_directory(
-    data_dirs=data_dirs,
+    #data_dirs=data_dirs,
+    trial_frames_dict=all_trial_frames,
     model_name="facebook/sam2.1-hiera-base-plus",
     # model_name='facebook/sam-vit-huge',
     conf_threshold=0.5,

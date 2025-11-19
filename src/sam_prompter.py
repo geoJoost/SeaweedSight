@@ -65,7 +65,6 @@ def prompt_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_
 
     # Initialize with first frame
     all_logits[0] = {
-        # 'logits': torch.max(video_res_masks, dim=0, keepdim=True)[0],
         'logits': video_res_masks, # Store full logits tensor for all objects
         'points': points,
         'labels': labels,
@@ -135,7 +134,7 @@ def prompt_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_
 
     return video_frames, probs_stack, all_logits
 
-def segment_frames_sam1(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
+def segment_frames_sam1(frames, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -147,10 +146,10 @@ def segment_frames_sam1(data_dir, model_name, max_frames=None, num_prompts=5, lu
     processor = SamProcessor.from_pretrained(model_name)
 
     # Load your video frames
-    video_frames = load_video_frames(data_dir)
+    # video_frames = load_video_frames(data_dir)
 
     # Slice video_frames if max_frames is specified
-    video_frames_inference = video_frames if max_frames is None else video_frames[:max_frames]
+    video_frames_inference = frames if max_frames is None else frames[:max_frames]
 
     # Collect logits for all frames
     all_outputs = {}
@@ -213,7 +212,7 @@ def segment_frames_sam1(data_dir, model_name, max_frames=None, num_prompts=5, lu
 
     print(f"[INFO] Tracked seaweed objects through {len(all_outputs):,} frames")
 
-    return video_frames, probs_stack, all_outputs
+    return video_frames_inference, probs_stack, all_outputs
 
 def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device
