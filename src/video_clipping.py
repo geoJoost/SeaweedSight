@@ -156,11 +156,11 @@ def get_master_stats(
             pixels_list[i].extend(area[:, :, i].flatten())
 
         frame_idx += 1
-        
-        sample_frame = frame.copy()
+        if frame_idx > 10:
+            sample_frame = clipped_frame.copy()
+            break
 
     cap.release()
-
 
     # Convert lists to NumPy arrays
     pixels_array = [np.array(channel) for channel in pixels_list]
@@ -185,7 +185,7 @@ def get_master_stats(
         linewidth=2, edgecolor='r', facecolor='none'
     )
     plt.gca().add_patch(rect)
-    plt.title(f"Sample Frame with ormalization rea")
+    plt.title(f"Sample Frame with normalization area")
     plt.axis('off')
     plt.savefig('doc/video_normalization.png')
     plt.close()
@@ -223,6 +223,23 @@ def normalize_frame(
         )
 
     return np.clip(frame, 0, 255).astype(np.uint8)
+
+def normalize_clipped_frame(clipped_frame, master_mean, master_std):
+    """
+    Normalize a clipped frame to match the master's mean and std.
+    Assumes the clipped frame should match the master's overall distribution.
+    """
+    for i in range(3):  # For each channel (B, G, R)
+        current_mean = np.mean(clipped_frame[:, :, i])
+        current_std = np.std(clipped_frame[:, :, i])
+
+        # Avoid division by zero
+        if current_std > 0:
+            clipped_frame[:, :, i] = (
+                ((clipped_frame[:, :, i] - current_mean) * (master_std[i] / current_std))
+                + master_mean[i]
+            )
+    return np.clip(clipped_frame, 0, 255).astype(np.uint8)
 
 def verify_normalization(
     original_frame: np.ndarray,
@@ -357,7 +374,7 @@ def process_video_to_frames(
 
 def process_video_n_frames(
     input_path: str,
-    n_frames: int = 175,
+    seconds_interval: float = 8.0, # Default of 8.0 seconds; roughly 175 frames at 21FPS
     keep_ranges: list = None,
     roi: tuple = None,
     normalize: bool = False,
@@ -368,7 +385,7 @@ def process_video_n_frames(
 ) -> None:
     """
     Process a video file:
-    - Saves 1 frame every `n_frames` frames.
+    - Saves a frame every for every 'seconds_interval' input.
     - Removes specified frame ranges.
     - Splits the result into parts based on the keep ranges.
     - Optionally normalizes frames to match a master's color distribution.
@@ -376,7 +393,7 @@ def process_video_n_frames(
 
     Args:
         input_path (str): Path to the input .avi file.
-        n_frames (int): Save a frame every `n_frames` frames (default: 175).
+        seconds_interval (float): Save a frame every `seconds_interval` seconds (default: 5.0).
         keep_ranges (list): List of frame ranges to keep (e.g., [(104, 2450), (2551, 4919), (5001, None)]).
         roi (tuple): Target ROI dimensions as (width, height).
         normalize (bool): If True, normalize frames using master_mean and master_std (default: False).
@@ -403,6 +420,9 @@ def process_video_n_frames(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"[INFO] Total of {total_frames:,} frames found in {input_path}")
 
+    # Calculate how many frames to skip on the desired interval in seconds
+    frame_skip = int(fps * seconds_interval)
+    
     # Create output directories
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     trial_dirs = [os.path.join(output_dir, f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
@@ -433,8 +453,8 @@ def process_video_n_frames(
             frame_count += 1
             continue
 
-        # Save a frame every `n_frames` frames
-        if frame_count % n_frames == 0:
+        # Save a frame based on the time interval
+        if frame_count % frame_skip == 0:
             # Calculate dynamic ROI for this frame, so it is horizontally centered
             roi_x, roi_y, roi_width, roi_height = calculate_dynamic_roi(frame, roi_width, roi_height)
 
@@ -445,14 +465,16 @@ def process_video_n_frames(
             # verify_roi(frame, roi) # For debugging
 
             if normalize:
-                normalized_frame = normalize_frame(
-                    clipped_frame.copy(), # BGR
-                    master_mean,
-                    master_std,
-                    normalization_area,
-                )
+                # normalized_frame = normalize_frame(
+                #     clipped_frame.copy(), # BGR
+                #     master_mean,
+                #     master_std,
+                #     normalization_area,
+                # )
 
-                verify_normalization(clipped_frame.copy(), normalized_frame, normalization_area)
+                normalized_frame = normalize_clipped_frame(clipped_frame.copy(), master_mean, master_std)
+
+                # verify_normalization(clipped_frame.copy(), normalized_frame, normalization_area)
                 clipped_frame = normalized_frame # Overwrite to keep existing code functional without normalization
 
             # Save the clipped frame
@@ -483,14 +505,15 @@ video_configs = {
 roi_width, roi_height = find_smallest_roi(video_configs)
 
 # Get normalization statistics for colour correction
-normalization_area = (150, 35, 100, 50)
-master_mean, master_std = get_master_stats(r"data/Ducks/Ulva_05_1.avi", roi_width, roi_height, normalization_area)
+# normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
+normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
+master_mean, master_std = get_master_stats(r"data/Ducks/Duck1.avi", roi_width, roi_height, normalization_area)
 
 # Split video into individual trials
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
     process_video_n_frames(input_video, 
-                           n_frames=175, 
+                           seconds_interval=8.0, #n_frames=175, 
                            keep_ranges=keep_ranges, 
                            roi=(roi_width, roi_height),
                            normalize=True,
