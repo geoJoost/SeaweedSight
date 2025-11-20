@@ -53,4 +53,4 @@ def plot_features_vs_density(df, features, output_folder='.'):
     plt.close()
 
     # Print correlation table
-    print("Correlation with Density:\n", correlations)
+    print(f"[INFO] Correlation with density:\n{correlations}")

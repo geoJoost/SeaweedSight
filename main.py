@@ -48,9 +48,9 @@ def process_video_directory(
         # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
         # Prompt SAM2 for semantic segmentation per-frame
-        # video_frames, probs_stack, all_outputs = segment_frames_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
+        # video_frames, probs_stack, all_outputs = segment_frames_sam2(frames, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
-        # Prompt SAM2 for semantic segmentation per-frame
+        # Prompt SAM1 for semantic segmentation per-frame
         video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, model_name, max_frames, num_prompts=5, luminance_percentile=15)
 
         # Pre-allocate lists for all features
@@ -125,6 +125,12 @@ video_configs = {
     r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
     r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
     r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)],
+
     }
 
 # Find the smallest ROI
@@ -148,7 +154,7 @@ for input_video, keep_ranges in video_configs.items():
                            roi=(roi_width, roi_height),
 
                            # Normalization parameters
-                           normalize=True,
+                           normalize=False,
                            normalization_area=normalization_area,
                            master_mean=master_mean,
                            master_std=master_std,
@@ -160,9 +166,8 @@ for input_video, keep_ranges in video_configs.items():
 
 ## Semantic segmentation ##
 process_video_directory(
-    #data_dirs=data_dirs,
     trial_frames_dict=all_trial_frames,
-    model_name="facebook/sam2.1-hiera-base-plus",
+    model_name="facebook/sam2.1-hiera-large", # UNUSED FOR SAM1
     # model_name='facebook/sam-vit-huge',
     conf_threshold=0.5,
     output_folder="data/processed",

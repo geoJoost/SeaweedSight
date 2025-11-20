@@ -49,10 +49,6 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
     # Flatten luminance and find the threshold for the 10% darkest pixels, corresponding to the seaweed
     dark_threshold = np.percentile(l.flatten(), luminance_percentile)  # 10th percentile = 10% darkest
     dark_regions = l < dark_threshold
-
-    # # Flatten luminance and find the threshold for the 90% brightest pixels, corresponding to the background
-    # dark_threshold = np.percentile(l.flatten(), 10)  # 90th percentile = 90% darkest
-    # dark_regions = l > dark_threshold
     
     # Exclude already segmented regions
     if existing_masks is not None:

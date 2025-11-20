@@ -155,20 +155,16 @@ def segment_frames_sam1(frames, model_name, max_frames=None, num_prompts=5, lumi
     all_outputs = {}
 
     # Segment each image individually (i.e., not treated as video for SAM2)
-    for frame_idx, pil_image in enumerate(video_frames_inference):
+    for frame_idx, image in enumerate(video_frames_inference):
         # Create prompts
-        points, labels = create_luminance_prompts(pil_image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
-
-        # # Convert to tensor and explicitly cast to bfloat16
-        # import torchvision.transforms.functional as TF
-        # image_tensor = TF.to_tensor(pil_image).to(torch.bfloat16)
+        points, labels = create_luminance_prompts(image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
 
         # Convert outputs into SAM1 format
         points_tensor = torch.tensor(points).view(1, 1, -1, 2)
         labels_tensor = torch.tensor(labels).view(1, 1, -1)
 
         inputs = processor(
-            images=pil_image,
+            images=image,
             input_points=points_tensor,
             input_labels=labels_tensor,
             return_tensors="pt",
@@ -214,7 +210,7 @@ def segment_frames_sam1(frames, model_name, max_frames=None, num_prompts=5, lumi
 
     return video_frames_inference, probs_stack, all_outputs
 
-def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
+def segment_frames_sam2(frames, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
@@ -223,19 +219,16 @@ def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, lu
     model = Sam2Model.from_pretrained(model_name).to(device, dtype=torch.bfloat16)
     processor = Sam2Processor.from_pretrained(model_name)
 
-    # Load your video frames
-    video_frames = load_video_frames(data_dir)
-
     # Slice video_frames if max_frames is specified
-    video_frames_inference = video_frames if max_frames is None else video_frames[:max_frames]
+    video_frames_inference = frames if max_frames is None else frames[:max_frames]
 
     # Collect logits for all frames
     all_outputs = {}
 
     # Segment each image individually (i.e., not treated as video for SAM2)
-    for frame_idx, pil_image in enumerate(video_frames_inference):
+    for frame_idx, image in enumerate(video_frames_inference):
         # Create prompts
-        points, labels = create_luminance_prompts(pil_image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
+        points, labels = create_luminance_prompts(image, num_prompts=num_prompts, luminance_percentile=luminance_percentile)
 
         # # Convert to tensor and explicitly cast to bfloat16
         # import torchvision.transforms.functional as TF
@@ -246,7 +239,7 @@ def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, lu
         labels_tensor = torch.tensor(labels).view(1, 1, -1)
 
         inputs = processor(
-            images=pil_image,
+            images=image,
             input_points=points_tensor,
             input_labels=labels_tensor,
             return_tensors="pt",
@@ -290,4 +283,4 @@ def segment_frames_sam2(data_dir, model_name, max_frames=None, num_prompts=5, lu
 
     print(f"[INFO] Tracked seaweed objects through {len(all_outputs):,} frames")
 
-    return video_frames, probs_stack, all_outputs
+    return video_frames_inference, probs_stack, all_outputs
