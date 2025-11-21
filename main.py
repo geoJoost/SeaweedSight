@@ -7,7 +7,7 @@ import glob
 from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam2_outputs, visualize_features
-from src.data_exploration import plot_features_vs_density
+from src.data_exploration import analyze_data
 from src.video_clipping import *
 
 def process_video_directory(
@@ -33,117 +33,123 @@ def process_video_directory(
     """
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
+    output_csv = os.path.join(output_folder, "ulva_processed_data.csv") # Create output .csv
 
-    # Initialize a list to hold all DataFrames
-    all_dfs = []
+    if not os.path.exists(output_csv):
+        # Initialize a list to hold all DataFrames
+        all_dfs = []
 
-    # Process each directory
-    for trial_name, frames in trial_frames_dict.items():
-        print(f"{'-' * 50}")
-        print(f"[INFO] Processing trial: {trial_name} using SAM")
+        # Process each directory
+        for trial_name, frames in trial_frames_dict.items():
+            print(f"{'-' * 50}")
+            print(f"[INFO] Processing trial: {trial_name} using SAM")
 
-        # Initialize DataFrame for this directory
-        df = pd.DataFrame()
-        # df['frame_path'] = get_frame_paths(data_dir)[:max_frames] if max_frames else get_frame_paths(data_dir)
-        # df['frame_id'] = df['frame_path'].apply(lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-        df['frame_id'] = list(range(len(frames)))
-        df[['model_name', 'conf_threshold', 'num_prompts', 'luminance_percentile', ]] = model_name, conf_threshold, num_prompts, luminance_percentile
-        df['density'] = extract_density_from_dir(trial_name)
-        df['trial'] = trial_name[-1] # Takes number from names like 'Ulva_05_1_trial2'
+            # Get dimensions of first frame to calculate total pixels
+            w, h, c = frames[0].shape
+            total_pixels = w * h
 
-        # Prompt SAM2 for video processing
-        # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
+            # Initialize DataFrame for this directory
+            df = pd.DataFrame()
+            df['frame_id'] = list(range(len(frames)))
+            df[['model_name', 'conf_threshold', 'num_prompts', 'luminance_percentile']] = model_name, conf_threshold, num_prompts, luminance_percentile
+            df['density'] = extract_density_from_dir(trial_name)
+            df['trial'] = trial_name[-1] # Takes number from names like 'Ulva_05_1_trial2'
 
-        # Prompt SAM2 for semantic segmentation per-frame
-        # video_frames, probs_stack, all_outputs = segment_frames_sam2(frames, model_name, max_frames, num_prompts=5, luminance_percentile=10)
+            # Prompt SAM2 for video processing
+            # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
-        # Prompt SAM1 for semantic segmentation per-frame
-        video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, 
-                                                                    model_name, 
-                                                                    max_frames, 
-                                                                    num_prompts=num_prompts, 
-                                                                    luminance_percentile=luminance_percentile)
+            # Prompt SAM2 for semantic segmentation per-frame
+            # video_frames, probs_stack, all_outputs = segment_frames_sam2(frames, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
-        # Pre-allocate lists for all features
-        feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
-        feature_data = {key: [] for key in feature_keys}
+            # Prompt SAM1 for semantic segmentation per-frame
+            video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, 
+                                                                        model_name, 
+                                                                        max_frames, 
+                                                                        num_prompts=num_prompts, 
+                                                                        luminance_percentile=luminance_percentile)
 
-        # Propagate over the frames
-        for frame_idx, probs in enumerate(probs_stack):
-            # Unpack prompts for this frame
-            current_points = all_outputs[frame_idx]['points']
-            current_labels = all_outputs[frame_idx]['labels']
-            current_logits = all_outputs[frame_idx]['logits']
-            current_masks = all_outputs[frame_idx]['masks'] # Second idx corresponds to the objectID. No tracking in current implementation
+            # Pre-allocate lists for all features
+            feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
+            feature_data = {key: [] for key in feature_keys}
 
-            # Calculate surface area (in px)
-            surface_area, binarized_mask = calculate_surface_area(probs.squeeze(), conf_threshold)
+            # Propagate over the frames
+            for frame_idx, probs in enumerate(probs_stack):
+                # Unpack prompts for this frame
+                current_points = all_outputs[frame_idx]['points']
+                current_labels = all_outputs[frame_idx]['labels']
+                current_logits = all_outputs[frame_idx]['logits']
+                current_masks = all_outputs[frame_idx]['masks'] # Second idx corresponds to the objectID. No tracking in current implementation
 
-            # Extract color features for the current frame
-            color_features = extract_color_features(video_frames[frame_idx], binarized_mask)
+                # Calculate surface area (in px)
+                surface_area, binarized_mask = calculate_surface_area(probs.squeeze(), conf_threshold)
 
-            # Append all features to lists
-            feature_data['surface_area'].append(surface_area)
-            for key in ['mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']:
-                feature_data[key].append(color_features[key])
+                # Extract color features for the current frame
+                color_features = extract_color_features(video_frames[frame_idx], binarized_mask)
 
-            # Save visualization for each frame
-            if save_files:
-                visualize_sam2_outputs(
-                    trial_name,
-                    video_frames,
-                    current_points,
-                    probs,
-                    current_masks,
-                    frame_idx=frame_idx,
-                    data_dir=trial_name,
-                    output_folder=output_folder,
-                    conf_threshold=conf_threshold
-                )
+                # Append all features to lists
+                feature_data['surface_area'].append(surface_area)
+                for key in ['mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']:
+                    feature_data[key].append(color_features[key])
 
-        # Assign all data to the DataFrame at once
-        for key in feature_keys:
-            df[key] = feature_data[key]
+                # Save visualization for each frame
+                if save_files:
+                    visualize_sam2_outputs(
+                        trial_name,
+                        video_frames,
+                        current_points,
+                        probs,
+                        current_masks,
+                        frame_idx=frame_idx,
+                        data_dir=trial_name,
+                        output_folder=output_folder,
+                        conf_threshold=conf_threshold
+                    )
 
-        # Calculate cumulative surface area
-        df['cumulative_surface_area'] = np.cumsum(df['surface_area'])
+            # Assign all data to the DataFrame at once
+            for key in feature_keys:
+                df[key] = feature_data[key]
 
-        # Append to the list of DataFrames
-        all_dfs.append(df)
+            # Calculate cumulative surface area
+            df['cumulative_surface_area'] = np.cumsum(df['surface_area'])
 
-        # Create visualization of features over entire timeseries
-        visualize_features(df, conf_threshold, trial_name, output_dir=output_folder)
-        print(f"[INFO] Finished processing {trial_name}")
+            # Calculate surface area percentage
+            df['surface_area_pct'] = (df['surface_area'] / total_pixels) * 100
 
-    # Concatenate all trial DataFrames into one
-    combined_df = pd.concat(all_dfs, ignore_index=True)
+            # Append to the list of DataFrames
+            all_dfs.append(df)
 
-    # Save a single combined CSV
-    combined_output_path = os.path.join(output_folder, "ulva_processed_data.csv")
-    combined_df.to_csv(combined_output_path, index=False)
-    print(f"[INFO] Saved processed data to: {combined_output_path}")
+            # Create visualization of features over entire timeseries
+            visualize_features(df, conf_threshold, trial_name, output_dir=output_folder)
+            print(f"[INFO] Finished processing {trial_name}")
+
+        # Concatenate all trial DataFrames into one
+        combined_df = pd.concat(all_dfs, ignore_index=True)
+
+        # Save a single combined CSV
+        combined_df.to_csv(output_csv, index=False)
+        print(f"[INFO] Saved processed data to: {output_csv}")
 
     # Compute correlation
-    plot_features_vs_density(
+    combined_df = pd.read_csv(output_csv)
+    analyze_data(
         df=combined_df,
-        features=['surface_area', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
+        features=['surface_area_pct', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
         output_folder=output_folder
     )
 
     print('[INFO] Code finished...')
-
 ## Video to frames preperation ##
 video_configs = {
-    r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
-    r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
-    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
-    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
-    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
+    # r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
+    r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)], # TODO: Update ranges. Max frames=7989
+    # r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+    # r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    # r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    # r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    # r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    # r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    # r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    # r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
     }
 
 # Find the smallest ROI

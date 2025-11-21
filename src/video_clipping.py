@@ -176,19 +176,19 @@ def get_master_stats(
         f"[INFO] R: μ={global_mean[2]:.2f}, σ={global_std[2]:.2f}"
     )
 
-    # Plot sample frame
-    sample_frame_rgb = cv2.cvtColor(sample_frame, cv2.COLOR_BGR2RGB)
-    plt.figure(figsize=(6, 6))
-    plt.imshow(sample_frame_rgb)
-    rect = patches.Rectangle(
-        (x, y), w, h,
-        linewidth=2, edgecolor='r', facecolor='none'
-    )
-    plt.gca().add_patch(rect)
-    plt.title(f"Sample Frame with normalization area")
-    plt.axis('off')
-    plt.savefig('doc/video_normalization.png')
-    plt.close()
+    # # Plot sample frame
+    # sample_frame_rgb = cv2.cvtColor(sample_frame, cv2.COLOR_BGR2RGB)
+    # plt.figure(figsize=(6, 6))
+    # plt.imshow(sample_frame_rgb)
+    # rect = patches.Rectangle(
+    #     (x, y), w, h,
+    #     linewidth=2, edgecolor='r', facecolor='none'
+    # )
+    # plt.gca().add_patch(rect)
+    # plt.title(f"Sample Frame with normalization area")
+    # plt.axis('off')
+    # plt.savefig('doc/video_normalization.png')
+    # plt.close()
 
     return global_mean, global_std
 
@@ -482,13 +482,6 @@ def process_video_n_frames(
 
             # Normalize frames to account for different illumination situations (i.e., decrease in sunlight)
             if normalize:
-                # normalized_frame = normalize_frame(
-                #     clipped_frame.copy(), # BGR
-                #     master_mean,
-                #     master_std,
-                #     normalization_area,
-                # )
-
                 normalized_frame = normalize_clipped_frame(clipped_frame.copy(), master_mean, master_std)
 
                 # verify_normalization(clipped_frame.copy(), normalized_frame, normalization_area)
