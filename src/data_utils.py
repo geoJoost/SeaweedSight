@@ -39,11 +39,12 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
         points: List of new prompt coordinates.
         labels: List of prompt labels (1 for positive).
     """
-    frame_np = np.array(frame)
-    r, g, b = frame_np.transpose(2, 0, 1)
+    # frame_np = np.array(frame)
+    r, g, b = frame.transpose(2, 0, 1)
 
     # # Convert to Lab color space for better green/white separation
-    lab = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2LAB)
+    # lab = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2LAB)
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
 
     # Flatten luminance and find the threshold for the 10% darkest pixels, corresponding to the seaweed

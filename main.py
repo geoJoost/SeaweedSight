@@ -15,8 +15,11 @@ def process_video_directory(
     trial_frames_dict,
     model_name="facebook/sam2-hiera-base-plus",
     conf_threshold=0.5,
+    num_prompts=5,
+    luminance_percentile=10,
     output_folder="data/processed",
     max_frames=None,
+    save_files=False
 ):
     """
     Process video frames from multiple directories, extract features, and visualize results.
@@ -31,18 +34,22 @@ def process_video_directory(
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
+    # Initialize a list to hold all DataFrames
+    all_dfs = []
+
     # Process each directory
-    # for data_dir in data_dirs:
     for trial_name, frames in trial_frames_dict.items():
-        print(f"[INFO] Processing trial:: {trial_name}")
+        print(f"{'-' * 50}")
+        print(f"[INFO] Processing trial: {trial_name} using SAM")
 
         # Initialize DataFrame for this directory
         df = pd.DataFrame()
         # df['frame_path'] = get_frame_paths(data_dir)[:max_frames] if max_frames else get_frame_paths(data_dir)
         # df['frame_id'] = df['frame_path'].apply(lambda x: int(os.path.splitext(os.path.basename(x))[0]))
         df['frame_id'] = list(range(len(frames)))
-        df[['model_name', 'conf_threshold']] = model_name, conf_threshold
+        df[['model_name', 'conf_threshold', 'num_prompts', 'luminance_percentile', ]] = model_name, conf_threshold, num_prompts, luminance_percentile
         df['density'] = extract_density_from_dir(trial_name)
+        df['trial'] = trial_name[-1] # Takes number from names like 'Ulva_05_1_trial2'
 
         # Prompt SAM2 for video processing
         # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
@@ -51,7 +58,11 @@ def process_video_directory(
         # video_frames, probs_stack, all_outputs = segment_frames_sam2(frames, model_name, max_frames, num_prompts=5, luminance_percentile=10)
 
         # Prompt SAM1 for semantic segmentation per-frame
-        video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, model_name, max_frames, num_prompts=5, luminance_percentile=15)
+        video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, 
+                                                                    model_name, 
+                                                                    max_frames, 
+                                                                    num_prompts=num_prompts, 
+                                                                    luminance_percentile=luminance_percentile)
 
         # Pre-allocate lists for all features
         feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
@@ -62,8 +73,8 @@ def process_video_directory(
             # Unpack prompts for this frame
             current_points = all_outputs[frame_idx]['points']
             current_labels = all_outputs[frame_idx]['labels']
-            # current_logits = all_outputs[frame_idx]['logits']
-            # current_masks = all_outputs[frame_idx]['masks'][frame_idx] # Second idx corresponds to the objectID. No tracking in current implementation
+            current_logits = all_outputs[frame_idx]['logits']
+            current_masks = all_outputs[frame_idx]['masks'] # Second idx corresponds to the objectID. No tracking in current implementation
 
             # Calculate surface area (in px)
             surface_area, binarized_mask = calculate_surface_area(probs.squeeze(), conf_threshold)
@@ -77,17 +88,18 @@ def process_video_directory(
                 feature_data[key].append(color_features[key])
 
             # Save visualization for each frame
-            # Save visualization for each frame
-            visualize_sam2_outputs(
-                trial_name,
-                video_frames,
-                current_points,
-                probs,
-                frame_idx=frame_idx,
-                data_dir=trial_name,
-                output_folder=output_folder,
-                conf_threshold=conf_threshold
-            )
+            if save_files:
+                visualize_sam2_outputs(
+                    trial_name,
+                    video_frames,
+                    current_points,
+                    probs,
+                    current_masks,
+                    frame_idx=frame_idx,
+                    data_dir=trial_name,
+                    output_folder=output_folder,
+                    conf_threshold=conf_threshold
+                )
 
         # Assign all data to the DataFrame at once
         for key in feature_keys:
@@ -96,23 +108,25 @@ def process_video_directory(
         # Calculate cumulative surface area
         df['cumulative_surface_area'] = np.cumsum(df['surface_area'])
 
+        # Append to the list of DataFrames
+        all_dfs.append(df)
+
         # Create visualization of features over entire timeseries
         visualize_features(df, conf_threshold, trial_name, output_dir=output_folder)
+        print(f"[INFO] Finished processing {trial_name}")
 
-        # Save .csv for downstream processes
-        output_path = f"{os.path.basename(trial_name)}_processed.csv"
-        df.to_csv(os.path.join(output_folder, output_path), index=False)
+    # Concatenate all trial DataFrames into one
+    combined_df = pd.concat(all_dfs, ignore_index=True)
 
-        print(f"[INFO] Saved processed data for {trial_name} to: {output_path}")
-    
-    # Combine all CSV's
-    csv_files = glob.glob(os.path.join(output_folder,'*.csv'))
-    df = pd.concat((pd.read_csv(f) for f in csv_files), ignore_index=True)
+    # Save a single combined CSV
+    combined_output_path = os.path.join(output_folder, "ulva_processed_data.csv")
+    combined_df.to_csv(combined_output_path, index=False)
+    print(f"[INFO] Saved processed data to: {combined_output_path}")
 
     # Compute correlation
     plot_features_vs_density(
-        df=df,
-        features=['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
+        df=combined_df,
+        features=['surface_area', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
         output_folder=output_folder
     )
 
@@ -120,17 +134,16 @@ def process_video_directory(
 
 ## Video to frames preperation ##
 video_configs = {
-    r"data/Ducks/Ulva_05_1.avi": [(204, 3980), (4090, 9236), (9489, 13285)],
+    r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
     r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
-    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
-    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
-    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)],
-
+    # r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+    # r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    # r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    # r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    # r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    # r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    # r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
     }
 
 # Find the smallest ROI
@@ -140,6 +153,20 @@ roi_width, roi_height = find_smallest_roi(video_configs)
 # normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
 normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
 master_mean, master_std = get_master_stats(r"data/Ducks/Ulva_05_1.avi", roi_width, roi_height, normalization_area)
+
+# Instead of normalization parameters from .avi, use ImageNet instead
+# Values are: mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225] for RGB
+# ImageNet mean and std for [0, 1] range (RGB order)
+mean_rgb = [0.485, 0.456, 0.406]
+std_rgb = [0.229, 0.224, 0.225]
+
+# Scale to [0, 255] range and switch to BGR order
+master_mean = np.array([m * 255 for m in mean_rgb][::-1])
+master_std = np.array([s * 255 for s in std_rgb][::-1])
+
+print(f"[INFO] ImageNet normalization values (in BGR):")
+print(f"[INFO] Master mean: {master_mean}")
+print(f"[INFO] Master std: {master_std}")
 
 # Split video into individual trials
 all_trial_frames = {}
@@ -160,16 +187,19 @@ for input_video, keep_ranges in video_configs.items():
                            master_std=master_std,
 
                            # Save frames
-                           save_files=True
+                           save_files=False
                            )
     all_trial_frames.update(trial_frames)
 
 ## Semantic segmentation ##
 process_video_directory(
     trial_frames_dict=all_trial_frames,
-    model_name="facebook/sam2.1-hiera-large", # UNUSED FOR SAM1
-    # model_name='facebook/sam-vit-huge',
+    # model_name="facebook/sam2.1-hiera-large", # SAM2 ONLY
+    model_name='facebook/sam-vit-huge', # SAM1 ONLY
     conf_threshold=0.5,
+    num_prompts=5,
+    luminance_percentile=5, # Increase to >5% when using normalization
     output_folder="data/processed",
-    max_frames=50,
+    max_frames=None,
+    save_files=True
 )

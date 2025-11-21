@@ -140,8 +140,6 @@ def segment_frames_sam1(frames, model_name, max_frames=None, num_prompts=5, lumi
     print(f"[INFO] Using device: {device}")
 
     # Initialize model
-    # TODO: Remove hard-coding
-    model_name = 'facebook/sam-vit-huge'
     model = SamModel.from_pretrained(model_name).to(device, dtype=torch.bfloat16)
     processor = SamProcessor.from_pretrained(model_name)
 

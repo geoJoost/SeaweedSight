@@ -16,8 +16,17 @@ def plot_features_vs_density(df, features, output_folder='.'):
         density_col (str): Name of the density column.
         output_folder (str): Directory to save the plot.
     """
+
+    # Make a copy of the DataFrame for plotting
+    df_plot = df.copy()
+
+    # For 'cumulative_surface_area', take the max per trial per density
+    if 'cumulative_surface_area' in features:
+        max_surface = df.groupby(['density', 'trial'], as_index=False)['cumulative_surface_area'].max()
+        df_plot = df_plot.drop(columns=['cumulative_surface_area']).merge(max_surface, on=['density', 'trial'], how='left')
+
     # Compute correlations
-    correlations = df[['density'] + features].corr()['density'][1:]
+    correlations = df_plot[['density'] + features].corr()['density'][1:]
 
     # Create subplots
     n_rows = (len(features) + 1) // 2  # Arrange in 2 columns
@@ -27,17 +36,15 @@ def plot_features_vs_density(df, features, output_folder='.'):
     # Plot each feature
     for i, feature in enumerate(features):
         ax = axes[i]
-
         # Scatter plot with regression line
         sns.regplot(
             x='density',
             y=feature,
-            data=df,
+            data=df_plot,
             ax=ax,
             scatter_kws={'alpha':0.5},
             line_kws={'color':'red'}
         )
-
         # Add correlation as text
         corr = correlations[feature]
         ax.set_title(f'{feature} (r = {corr:.2f})')
@@ -51,6 +58,7 @@ def plot_features_vs_density(df, features, output_folder='.'):
     plt.tight_layout()
     plt.savefig(os.path.join(output_folder, 'correlation.png'), dpi=200)
     plt.close()
+
 
     # Print correlation table
     print(f"[INFO] Correlation with density:\n{correlations}")

@@ -59,7 +59,7 @@ def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_thresh
 
     print(f"[INFO] Saved figure to: {output_path}")
 
-def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, frame_idx, data_dir, output_folder, conf_threshold=0.5):
+def visualize_sam2_outputs(input_path, video_frames, points, probs, current_masks, frame_idx, data_dir, output_folder, conf_threshold=0.5):
     # Create output directory
     output_dir = os.path.join(output_folder, f"{os.path.basename(data_dir)}_processed")
     os.makedirs(output_dir, exist_ok=True)
@@ -68,7 +68,7 @@ def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, fr
     frame = video_frames[frame_idx]
 
     # Combine masks for all objects into a single mask
-    binarized_mask = (video_res_masks > conf_threshold).to(torch.uint8) * 255
+    binarized_mask = (probs > conf_threshold).to(torch.uint8) * 255
     binarized_mask = binarized_mask.cpu().squeeze().numpy()
 
     # Create figure
@@ -85,12 +85,13 @@ def visualize_sam2_outputs(input_path, video_frames, points, video_res_masks, fr
 
     # Plot mask probabilities
     #axes[1].imshow(frame)
-    axes[1].imshow(video_res_masks.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
+    axes[1].imshow(probs.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
     axes[1].set_title('Confidence')
     axes[1].axis('off')
 
     # Plot binarized mask
-    axes[2].imshow(binarized_mask, cmap='gray')
+    axes[2].imshow(current_masks.squeeze(), cmap='gray')
+    # axes[2].imshow(binarized_mask, cmap='gray')
     axes[2].set_title('Prediction')
     axes[2].axis('off')
 
