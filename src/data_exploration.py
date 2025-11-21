@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.stats import t
 
 def logarithmic_curve(x, a, b):
     """Logarithmic curve: y = a * ln(x) + b"""
@@ -62,6 +63,23 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
                 r_squared = 1 - (ss_res / ss_tot)
                 ax.set_title(f'{feature} (log-curve, R² = {r_squared:.2f})')
                 print(f"[INFO] Logarithmic curve for {feature}: a={a:.2f}, b={b:.2f}, R²={r_squared:.2f}")
+
+                # Calculate degrees of freedom
+                n = len(x)
+                p = len(popt)
+                dof = max(0, n-p)
+
+                # Calculate residual standard deviation
+                residual_std = np.sqrt(ss_res / dof)
+                cov_matrix = pcov * residual_std**2
+                std_errors = np.sqrt(np.diag(cov_matrix))
+
+                # t-values and p-values
+                t_values = popt / std_errors
+                p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
+
+                print(f"\n\n[INFO] Logarithmic curve for {feature}:")
+                print(f"[INFO] a = {a:.4f} (p = {p_values[0]:.4f}), b = {b:.4f} (p = {p_values[1]:.4f}), R² = {r_squared:.4f}")
 
             except RuntimeError:
                 print(f"\n\n[INFO] Logarithmic curve fit failed for {feature}")
