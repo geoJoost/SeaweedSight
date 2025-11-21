@@ -170,10 +170,10 @@ def get_master_stats(
     global_std = np.array([np.std(channel) for channel in pixels_array])
 
     print(
-        f"Pixels in normalization_area for each channel: {pixels_array[0].shape[0]:,}\n"
-        f"B: μ={global_mean[0]:.2f}, σ={global_std[0]:.2f}\n"
-        f"G: μ={global_mean[1]:.2f}, σ={global_std[1]:.2f}\n"
-        f"R: μ={global_mean[2]:.2f}, σ={global_std[2]:.2f}"
+        f"[INFO] Pixels in normalization_area for each channel: {pixels_array[0].shape[0]:,}\n"
+        f"[INFO] B: μ={global_mean[0]:.2f}, σ={global_std[0]:.2f}\n"
+        f"[INFO] G: μ={global_mean[1]:.2f}, σ={global_std[1]:.2f}\n"
+        f"[INFO] R: μ={global_mean[2]:.2f}, σ={global_std[2]:.2f}"
     )
 
     # Plot sample frame
@@ -426,7 +426,7 @@ def process_video_n_frames(
     if not cap.isOpened():
         raise ValueError("Error: Could not open video.")
     print(f"{'-' * 50}")
-    print(f"Started processing of {input_path} into frames per {seconds_interval} seconds")
+    print(f"[INFO] Started processing of {input_path} into frames per {seconds_interval} seconds")
 
     # Extract footage parameters
     fps = cap.get(cv2.CAP_PROP_FPS)

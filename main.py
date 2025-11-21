@@ -136,13 +136,13 @@ def process_video_directory(
 video_configs = {
     r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
     r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)],
-    # r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
-    # r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    # r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    # r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    # r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    # r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    # r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
     r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
     }
 
@@ -201,5 +201,5 @@ process_video_directory(
     luminance_percentile=5, # Increase to >5% when using normalization
     output_folder="data/processed",
     max_frames=None,
-    save_files=True
+    save_files=False
 )

@@ -153,10 +153,10 @@ def extract_color_features(frame, binarized_mask):
     frame_np = np.array(frame)
 
     # Extract RGB values
-    r, g, b = frame_np[mask, 0], frame_np[mask, 1], frame_np[mask, 2]
+    b, g, r = frame_np[mask, 0], frame_np[mask, 1], frame_np[mask, 2]
 
     # Convert to Lab color space
-    lab_frame = cv2.cvtColor(frame_np, cv2.COLOR_RGB2LAB)
+    lab_frame = cv2.cvtColor(frame_np, cv2.COLOR_BGR2LAB)
     l, a, lab_b = lab_frame[mask].T
 
     # Compute mean values
