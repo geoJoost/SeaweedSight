@@ -140,8 +140,8 @@ def process_video_directory(
     print('[INFO] Code finished...')
 ## Video to frames preperation ##
 video_configs = {
-    # r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
-    r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)], # TODO: Update ranges. Max frames=7989
+    r"data/Ducks/Ulva_05_1.avi": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
+    # r"data/Ducks/Ulva_10_1.avi": [(339, 4176), (4313, 7691), (7865, 11453)], # TODO: Update ranges. Max frames=7989
     # r"data/Ducks/Ulva_15_1.avi": [(119, 2670), (2850, 5143), (5480, 7741)],
     # r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
     # r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
@@ -193,7 +193,7 @@ for input_video, keep_ranges in video_configs.items():
                            master_std=master_std,
 
                            # Save frames
-                           save_files=False
+                           save_files=True
                            )
     all_trial_frames.update(trial_frames)
 
@@ -207,5 +207,5 @@ process_video_directory(
     luminance_percentile=5, # Increase to >5% when using normalization
     output_folder="data/processed",
     max_frames=None,
-    save_files=False
+    save_files=True
 )

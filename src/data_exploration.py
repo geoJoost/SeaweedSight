@@ -19,7 +19,7 @@ from scipy.stats import t
 
 def logarithmic_curve(x, a, b):
     """Logarithmic curve: y = a * ln(x) + b"""
-    return a * np.log(x) + b
+    return a * np.log(x) + b # Linear-log model
 
 def plot_regression(df, features, output_name, output_folder='doc', scatter_color='#219ebc', log_curve=False):
     """
@@ -61,8 +61,6 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
                 ss_res = np.sum(residuals**2)
                 ss_tot = np.sum((y - np.mean(y))**2)
                 r_squared = 1 - (ss_res / ss_tot)
-                ax.set_title(f'{feature} (log-curve, R² = {r_squared:.2f})')
-                print(f"[INFO] Logarithmic curve for {feature}: a={a:.2f}, b={b:.2f}, R²={r_squared:.2f}")
 
                 # Calculate degrees of freedom
                 n = len(x)
@@ -78,8 +76,9 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
                 t_values = popt / std_errors
                 p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
 
+                ax.set_title(f'{feature} (R² = {r_squared * 100:.1f}, p = {p_values[1]:.4f})')
                 print(f"\n\n[INFO] Logarithmic curve for {feature}:")
-                print(f"[INFO] a = {a:.4f} (p = {p_values[0]:.4f}), b = {b:.4f} (p = {p_values[1]:.4f}), R² = {r_squared:.4f}")
+                print(f"[INFO] a = {a:.4f} (p = {p_values[0]:.4f}), b = {b:.4f} (p = {p_values[1]:.4f}), R² = {r_squared * 100:.1f}")
 
             except RuntimeError:
                 print(f"\n\n[INFO] Logarithmic curve fit failed for {feature}")
@@ -223,7 +222,9 @@ def plot_features_vs_density(df, features, output_name, scatter_color, log_trans
     vif_data, corr_matrix = compute_colinearity(df_analysis, features, output_name=output_name)
 
     # Compute regression for selected features
-    plot_regression(df_analysis, features=features, output_name=output_name, scatter_color=scatter_color, log_curve=log_transform)
+    # Even for log-models, we keep the original values
+    # Instead, we compute a logarithmic curve on the original values
+    plot_regression(df, features=features, output_name=output_name, scatter_color=scatter_color, log_curve=log_transform)
 
     print(f"[INFO] Computed statistics for {output_name}")
 
