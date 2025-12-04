@@ -16,6 +16,7 @@ import os
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.stats import t
+from matplotlib.lines import Line2D  
 
 def logarithmic_curve(x, a, b):
     """Logarithmic curve: y = a * ln(x) + b"""
@@ -340,5 +341,105 @@ def plot_combined_regressions(df, features, output_folder='doc'):
     plt.savefig(os.path.join(output_folder, 'combined_regressions.png'), dpi=200)
     plt.close()
 
+def plot_all_regressions(df, features, feature_names, output_folder='doc'):
+    """
+    Plot all regressions (per-frame/per-cycle, linear/log-linear) in a single figure.
+    Uses the existing plot_regression logic but combines everything into one grid.
+    """
+    
+    # Prepare data for per-frame and per-cycle analyses
+    df_per_frame = df.copy()
+    df_per_cycle = df.groupby(['density', 'trial'], as_index=False)[features].mean()
+
+    # Create figure with shared y-axes
+    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 3*len(features)),
+                            sharey='row', sharex='col')
+
+    if len(features) == 1:
+        axes = axes.reshape(1, -1)  # Ensure 2D array even with 1 feature
+
+    # Define colors and analysis configurations
+    colors = {
+        'Per-frame | Linear': '#219ebc',
+        'Per-frame | Log-linear': '#fb8500',
+        'Per-cycle | Linear': '#606c38',
+        'Per-cycle | Log-linear': '#8b5cf6'
+    }
+
+    # Column titles
+    col_titles = [
+        'Per-frame | Linear',
+        'Per-frame | Log-linear',
+        'Per-cycle | Linear',
+        'Per-cycle | Log-linear'
+    ]
+
+    # Set column titles
+    for ax, col_title in zip(axes[0], col_titles):
+        ax.set_title(col_title, fontsize=11, pad=5, ha='center')
+
+    # Plot each feature
+    for i, (feature, feature_name) in enumerate(zip(features, feature_names)):
+        for j, (analysis_type, df_analysis, reg_type) in enumerate([
+            ('Per-frame', df_per_frame, 'Linear'),
+            ('Per-frame', df_per_frame, 'Log-linear'),
+            ('Per-cycle', df_per_cycle, 'Linear'),
+            ('Per-cycle', df_per_cycle, 'Log-linear')
+        ]):
+            ax = axes[i, j]
+            x = df_analysis['density']
+            y = df_analysis[feature]
+
+            # Completely disable per-frame plots for cumulative surface area
+            if feature_name == "Cumulative surface area" and j in (0, 1):
+
+                # Break sharey/sharex links so the axes stops being re-populated automatically
+                ax._shared_x_refs = []
+                ax._shared_y_refs = []
+
+                # Fully clear the axes including shared elements
+                ax.cla()
+
+                # Turn off ticks and frame
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_xlabel('')
+                ax.set_ylabel('')
+                ax.set_frame_on(False)
+                
+                if j == 0:
+                    ax.set_ylabel("Tot. surface area", fontsize=11, labelpad=10)
+                continue
+
+            # Plot data
+            scatter_color = colors[col_titles[j]]
+            log_curve = 'Log' in reg_type
+
+            if log_curve:
+                fit_logarithmic_regression(x, y, ax, scatter_color)
+            else:
+                X = sm.add_constant(x)
+                model = sm.OLS(y, X).fit()
+                sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
+
+            # Add grid
+            ax.grid(True, linestyle='--', alpha=0.3)
+
+            # Only first column gets a ylabel
+            if j == 0:
+                ax.set_ylabel(feature_name, fontsize=11, labelpad=10)
+            else:
+                ax.set_ylabel('')
+
+            # Only bottom row gets the x-label
+            if i < len(features) - 1:
+                ax.set_xlabel('')
+            else:
+                ax.set_xlabel('Density [g/L]', fontsize=11)
 
 
+    # Adjust layout
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_folder, 'all_regressions.png'), dpi=200, bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=300, bbox_inches='tight')
+    plt.close()

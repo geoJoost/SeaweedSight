@@ -7,7 +7,7 @@ import glob
 from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam2_outputs, visualize_features
-from src.data_exploration import analyze_data
+from src.data_exploration import analyze_data, plot_all_regressions
 from src.video_clipping import *
 
 def process_video_directory(
@@ -131,9 +131,16 @@ def process_video_directory(
 
     # Compute correlation
     combined_df = pd.read_csv(output_csv)
+    features = ['surface_area_pct', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
+    feature_names = ['Surface area', 'Cumulative surface area', 'Red', 'Green', 'Blue', 'Luminance', 'a*', 'b*']
+
+    # Combined regressors plot
+    plot_all_regressions(combined_df, features, feature_names, output_folder='doc')
+
+    # Regressors into own plots
     analyze_data(
         df=combined_df,
-        features=['surface_area_pct', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b'],
+        features=features,
         output_folder=output_folder
     )
 
