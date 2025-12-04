@@ -21,6 +21,48 @@ def logarithmic_curve(x, a, b):
     """Logarithmic curve: y = a * ln(x) + b"""
     return a * np.log(x) + b # Linear-log model
 
+def fit_logarithmic_regression(x, y, ax, scatter_color):
+    """Fit and plot a logarithmic regression, returning R² and p-values."""
+    try:
+        # Ensure x > 0 for log(x)
+        # x = np.clip(x, a_min=1e-10, a_max=None)
+        popt, pcov = curve_fit(logarithmic_curve, x, y, maxfev=10000)
+        a, b = popt
+
+        # Plot scatter points
+        sns.scatterplot(x=x, y=y, ax=ax, alpha=0.5, color=scatter_color)
+
+        # Plot fitted logarithmic curve
+        x_fit = np.linspace(x.min(), x.max(), 100)
+        y_fit = logarithmic_curve(x_fit, *popt)
+        ax.plot(x_fit, y_fit, color='red', label=f'Log curve: y = {a:.2f} ln(x) + {b:.2f}')
+
+        # Calculate R²
+        residuals = y - logarithmic_curve(x, *popt)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((y - np.mean(y))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+
+        # Calculate degrees of freedom
+        n = len(x)
+        p = len(popt)
+        dof = max(0, n-p)
+
+        # Calculate residual standard deviation
+        residual_std = np.sqrt(ss_res / dof)
+        cov_matrix = pcov * residual_std**2
+        std_errors = np.sqrt(np.diag(cov_matrix))
+
+        # t-values and p-values
+        t_values = popt / std_errors
+        p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
+
+        return r_squared, p_values[1]
+    except RuntimeError:
+        print(f"\n\n[ERROR] Logarithmic curve fit failed")
+        sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
+        return None, None
+
 def plot_regression(df, features, output_name, output_folder='doc', scatter_color='#219ebc', log_curve=False):
     """
     Compute and plot linear or logarithmic curve regression for each feature vs. density.
@@ -42,62 +84,38 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
 
         if log_curve:
             # Fit logarithmic curve: y = a * ln(x) + b
-            try:
-                # Ensure x > 0 for log(x)
-                # x = np.clip(x, a_min=1e-10, a_max=None)
-                popt, pcov = curve_fit(logarithmic_curve, x, y, maxfev=10000)
-                a, b = popt
-
-                # Plot scatter points
-                sns.scatterplot(x=x, y=y, ax=ax, alpha=0.5, color=scatter_color)
-
-                # Plot fitted logarithmic curve
-                x_fit = np.linspace(x.min(), x.max(), 100)
-                y_fit = logarithmic_curve(x_fit, *popt)
-                ax.plot(x_fit, y_fit, color='red', label=f'Log curve: y = {a:.2f} ln(x) + {b:.2f}')
-
-                # Calculate R²
-                residuals = y - logarithmic_curve(x, *popt)
-                ss_res = np.sum(residuals**2)
-                ss_tot = np.sum((y - np.mean(y))**2)
-                r_squared = 1 - (ss_res / ss_tot)
-
-                # Calculate degrees of freedom
-                n = len(x)
-                p = len(popt)
-                dof = max(0, n-p)
-
-                # Calculate residual standard deviation
-                residual_std = np.sqrt(ss_res / dof)
-                cov_matrix = pcov * residual_std**2
-                std_errors = np.sqrt(np.diag(cov_matrix))
-
-                # t-values and p-values
-                t_values = popt / std_errors
-                p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
-
-                ax.set_title(f'{feature} (R² = {r_squared * 100:.1f}, p = {p_values[1]:.4f})')
-                print(f"\n\n[INFO] Logarithmic curve for {feature}:")
-                print(f"[INFO] a = {a:.4f} (p = {p_values[0]:.4f}), b = {b:.4f} (p = {p_values[1]:.4f}), R² = {r_squared * 100:.1f}")
-
-            except RuntimeError:
-                print(f"\n\n[INFO] Logarithmic curve fit failed for {feature}")
-                sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color': scatter_color}, line_kws={'color':'red'})
-                ax.set_title(f'{feature} (fit failed)')
+            r_squared, p_value = fit_logarithmic_regression(x, y, ax, scatter_color)
+            print(f"\n[INFO] Logarithmic regression for {feature}:")
+            print(f"R² = {r_squared * 100:.1f}%, p-value = {p_value:.3f}")
+            ax.set_title(f'{feature} (R² = {r_squared * 100:.1f}, p = {p_value:.3f})')
 
         else:
             # Fit linear regression
             X = sm.add_constant(x)
             model = sm.OLS(y, X).fit()
 
+            # Extract R² and p-value
+            r_squared = model.rsquared
+            p_value = model.f_pvalue
+
+            # Format p-value for reporting
+            if p_value < 0.001:
+                p_value_str = "<.001"
+            else:
+                p_value_str = f"{p_value:.3f}"
+            
+            # Print results in your desired format
+            print(f"\n[INFO] Linear regression for {feature}:")
+            print(f"R² = {r_squared * 100:.1f}%, p-value = {p_value_str}")
+
             # Print regression summary
-            print(f"\n\n[INFO] Linear regression for {feature}: \n{model.summary(alpha=0.05)}")
+            # print(f"\n\n[INFO] \n{model.summary(alpha=0.05)}")
 
             # Scatter plot with regression line
             sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color': scatter_color}, line_kws={'color':'red'})
 
             # Add R² as text
-            ax.set_title(f'{feature} (R² = {model.rsquared:.2f})')
+            ax.set_title(f'{feature} (R² = {model.rsquared * 100:.1f}, p-value = {p_value:.3f})')
 
         ax.set_xlabel('Density [g/L]')
         ax.set_ylabel(feature)
@@ -184,18 +202,6 @@ def compute_colinearity(df, features, output_name):
     
     return vif_data, corr_matrix
 
-# # Linear regression for the DataFrame
-# def compute_regression(df, features, output_name):
-#     """ Calculate linear regression using OLS """
-#     print(f"{'-' * 50}")
-#     print(f'[INFO] {'#' * 20} Regression results {output_name} {'#' * 20}')
-#     for feature in features:
-
-#         X = sm.add_constant(df['density'])
-#         y = df[feature]
-#         model = sm.OLS(y, X).fit()
-#         print(f"\n\n[INFO] Regression for {feature}: \n{model.summary(alpha=0.05)}")
-
 def plot_features_vs_density(df, features, output_name, scatter_color, log_transform=False):
     """
     Helper function to compute correlations, VIF, and regression for a given DataFrame.
@@ -261,24 +267,78 @@ def analyze_data(df, features, output_folder='.'):
     df_log_grouped = df_plot.groupby(['density', 'trial'], as_index=False)[features].mean()
     plot_features_vs_density(df_log_grouped, features, output_name="per_trial", scatter_color='#8b5cf6', log_transform=True)
 
-    # # Compute correlations for each row in the DataFrame
-    # correlations = df_plot[['density'] + features].corr()['density'][1:]
-    # plot_correlation(df_plot, correlations, features, output_name="per_frame", scatter_color='#219ebc')
+def plot_combined_regressions(df, features, output_folder='doc'):
+    """
+    Plot all regressions (per-frame/per-cycle, linear/log-linear) in a single figure.
+    """
+    # Prepare data for per-frame and per-cycle analyses
+    df_per_frame = df.copy()
+    df_per_cycle = df.groupby(['density', 'trial'], as_index=False)[features].mean()
 
-    # # Group by density and compute mean for each feature
-    # df_grouped = df_plot.groupby(['density', 'trial'], as_index=False)[features].mean()
-    # group_correlations = df_grouped.corr()['density'][1:]
-    # plot_correlation(df_grouped, group_correlations, features, output_name="per_trial", scatter_color='#606c38')
+    # Create a 4x4 grid of subplots (8 features × 2 analysis types × 2 regression types)
+    fig, axes = plt.subplots(4, 4, figsize=(20, 20))
+    axes = axes.flatten()
 
-    # # Assumptions check: VIF
-    # vif_data, corr_matrix = compute_colinearity(df_plot, features, output_name='per_frame')
-    # vif_data, corr_matrix = compute_colinearity(df_grouped, features, output_name='per_trial')
+    # Define colors for scatter points
+    colors = {
+        'per_frame_linear': '#219ebc',
+        'per_frame_log': '#fb8500',
+        'per_cycle_linear': '#606c38',
+        'per_cycle_log': '#8b5cf6'
+    }
 
-    # # Compute linear regression per feature
-    # # Due to extreme multi-colinearity (see VIF), we do it per feature
-    # compute_regression(df_plot, features=['surface_area', 'cumulative_surface_area', 'mean_G'], output_name="per frame")
-    # compute_regression(df_grouped, features=['surface_area', 'cumulative_surface_area', 'mean_G'], output_name="per trial")
+    for idx, feature in enumerate(features):
+        for analysis_type, df_analysis in [('per_frame', df_per_frame), ('per_cycle', df_per_cycle)]:
+            for regression_type in ['linear', 'log']:
+                ax = axes[idx * 4 + (0 if analysis_type == 'per_frame' else 2) + (0 if regression_type == 'linear' else 1)]
+                x = df_analysis['density']
+                y = df_analysis[feature]
 
-    print('...')
+                # Fit regression
+                if regression_type == 'log':
+                    try:
+                        popt, pcov = curve_fit(logarithmic_curve, x, y, maxfev=10000)
+                        a, b = popt
+                        x_fit = np.linspace(x.min(), x.max(), 100)
+                        y_fit = logarithmic_curve(x_fit, *popt)
+                        sns.scatterplot(x=x, y=y, ax=ax, alpha=0.5, color=colors[f'{analysis_type}_{regression_type}'])
+                        ax.plot(x_fit, y_fit, color='red', label=f'Log curve: y = {a:.2f} ln(x) + {b:.2f}')
+                        residuals = y - logarithmic_curve(x, *popt)
+                        ss_res = np.sum(residuals**2)
+                        ss_tot = np.sum((y - np.mean(y))**2)
+                        r_squared = 1 - (ss_res / ss_tot)
+                        n = len(x)
+                        p = len(popt)
+                        dof = max(0, n - p)
+                        residual_std = np.sqrt(ss_res / dof)
+                        cov_matrix = pcov * residual_std**2
+                        std_errors = np.sqrt(np.diag(cov_matrix))
+                        t_values = popt / std_errors
+                        p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
+                        ax.set_title(f'{feature} | {analysis_type} | Log (R² = {r_squared*100:.1f}, p = {p_values[1]:.3f})')
+                    except RuntimeError:
+                        sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':colors[f'{analysis_type}_{regression_type}']}, line_kws={'color':'red'})
+                        ax.set_title(f'{feature} | {analysis_type} | Log (fit failed)')
+                else:
+                    X = sm.add_constant(x)
+                    model = sm.OLS(y, X).fit()
+                    r_squared = model.rsquared
+                    p_value = model.f_pvalue
+                    p_value_str = f"{p_value:.3f}" if p_value >= 0.001 else "<.001"
+                    sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':colors[f'{analysis_type}_{regression_type}']}, line_kws={'color':'red'})
+                    ax.set_title(f'{feature} | {analysis_type} | Linear (R² = {r_squared*100:.1f}, p = {p_value_str})')
+
+                ax.set_xlabel('Density [g/L]')
+                ax.set_ylabel(feature)
+                ax.legend()
+
+    # Hide unused subplots
+    for j in range(len(features) * 4, len(axes)):
+        axes[j].axis('off')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_folder, 'combined_regressions.png'), dpi=200)
+    plt.close()
+
 
 
