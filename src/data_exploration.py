@@ -8,6 +8,7 @@ import statsmodels.api as sm
 import pandas as pd
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 import numpy as np
+import matplotlib.ticker as mtick
 
 import statsmodels.api as sm
 import seaborn as sns
@@ -346,13 +347,12 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     Plot all regressions (per-frame/per-cycle, linear/log-linear) in a single figure.
     Uses the existing plot_regression logic but combines everything into one grid.
     """
-    
     # Prepare data for per-frame and per-cycle analyses
     df_per_frame = df.copy()
     df_per_cycle = df.groupby(['density', 'trial'], as_index=False)[features].mean()
 
     # Create figure with shared y-axes
-    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 3*len(features)),
+    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 1.8*len(features)),
                             sharey='row', sharex='col')
 
     if len(features) == 1:
@@ -376,7 +376,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
 
     # Set column titles
     for ax, col_title in zip(axes[0], col_titles):
-        ax.set_title(col_title, fontsize=11, pad=5, ha='center')
+        ax.set_title(col_title, fontsize=10, pad=5, ha='center')
 
     # Plot each feature
     for i, (feature, feature_name) in enumerate(zip(features, feature_names)):
@@ -390,6 +390,15 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             x = df_analysis['density']
             y = df_analysis[feature]
 
+            # For total surface area, use million formatter
+            ax.yaxis.set_major_formatter(mtick.EngFormatter(unit=''))
+
+            # Configure x-ticks: only bottom row gets ticks and labels
+            if i == len(features) - 1:
+                ax.set_xticks([1, 2, 3, 4, 5])
+            else:
+                ax.set_xticks([])
+
             # Completely disable per-frame plots for cumulative surface area
             if feature_name == "Cumulative surface area" and j in (0, 1):
 
@@ -401,14 +410,17 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
                 ax.cla()
 
                 # Turn off ticks and frame
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel('')
-                ax.set_ylabel('')
-                ax.set_frame_on(False)
+                #ax.set_xticks([])
+                #ax.set_yticks([])
+                #ax.set_xlabel('')
+                #ax.set_ylabel('')
+                ax.set_frame_on(True)
+
+                ax.text(0.5, 0.5, "Per-cycle only.", ha="center", va="center", fontsize=10, transform=ax.transAxes)
+
                 
                 if j == 0:
-                    ax.set_ylabel("Tot. surface area", fontsize=11, labelpad=10)
+                    ax.set_ylabel("Tot. surface area [px]", fontsize=10, labelpad=5)
                 continue
 
             # Plot data
@@ -427,7 +439,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
 
             # Only first column gets a ylabel
             if j == 0:
-                ax.set_ylabel(feature_name, fontsize=11, labelpad=10)
+                ax.set_ylabel(feature_name, fontsize=10, labelpad=5)
             else:
                 ax.set_ylabel('')
 
@@ -435,10 +447,11 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             if i < len(features) - 1:
                 ax.set_xlabel('')
             else:
-                ax.set_xlabel('Density [g/L]', fontsize=11)
+                ax.set_xlabel('Density [g/L]', fontsize=10)
 
 
     # Adjust layout
+    fig.align_ylabels()
     plt.tight_layout()
     plt.savefig(os.path.join(output_folder, 'all_regressions.png'), dpi=200, bbox_inches='tight')
     plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=300, bbox_inches='tight')
