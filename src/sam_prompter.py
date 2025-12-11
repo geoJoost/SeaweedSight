@@ -1,4 +1,4 @@
-"""Script for prompting SAM2 for video segmentation """
+"""Script for prompting SAM1/SAM2 for video/image segmentation """
 
 import os
 import torch
@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 
 # Custom imports
 from src.data_utils import load_video_frames, create_luminance_prompts
-from src.visualization_utils import visualize_sam2_outputs, visualize_luminance_prompts
 
 """ Used for semantic/instance segmentation on video data """
 def prompt_sam2(data_dir, model_name, max_frames=None, num_prompts=5, luminance_percentile=10):

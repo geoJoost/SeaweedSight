@@ -8,7 +8,14 @@ import os
 import torch
 import cv2
 import numpy as np
+import random
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Circle
+import torch
+import re
 
+# Custom imports
 def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_threshold, output_path="doc/prompt_experiment_luminance.png"):
     """
     Visualize the original frame, luminance channel, dark regions, and connected components.
@@ -152,3 +159,114 @@ def visualize_features(df, conf_threshold, data_dir, output_dir):
 
     print(f"[INFO] Saved feature trends plot to: {plot_path}")
     return plot_path
+
+def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompts=5, luminance_percentile=10, output_folder="doc"):
+    """
+    Plot a random frame from each density in a shared subplot.
+    Each row is a density, and each column is frame, probabilities, and mask.
+    """
+    from src.sam_prompter import segment_frames_sam1
+
+    def extract_density_from_trial_name(trial_name):
+        """Extract density from trial name (e.g., Ulva_05_1_C_trial1 -> 0.5)"""
+        match = re.search(r'Ulva_(\d+)_', trial_name)
+        if match:
+            return float(match.group(1)) / 10
+        return 0.0
+    
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Define the densities you want to include
+    target_densities = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
+
+    # Filter trials: only include trials with target densities
+    filtered_trials = []
+    for trial_name in trial_frames_dict.keys():
+        density = extract_density_from_trial_name(trial_name)
+        if density in target_densities:
+            filtered_trials.append(trial_name)
+
+    # Sort by density
+    filtered_trials = sorted(filtered_trials, key=lambda x: extract_density_from_trial_name(x))
+
+    # Select two random trials per density
+    selected_trials = {}
+    for trial_name in filtered_trials:
+        density = extract_density_from_trial_name(trial_name)
+        if density not in selected_trials:
+            selected_trials[density] = []
+        selected_trials[density].append(trial_name)
+
+    # Keep only two trials per density
+    for density in selected_trials:
+        selected_trials[density] = selected_trials[density][:2]
+
+    # Create subplot: 6 rows (one per density), 6 columns (two sets of Image, Confidence, Masks)
+    nrows = len(target_densities)
+    fig, axes = plt.subplots(nrows, 6, figsize=(6, 11.69))  # Portrait A4 = (8.27, 11.69)
+
+    if nrows == 1:
+        axes = axes[None, :]  # Ensure axes is 2D even for a single row
+
+    # Custom colormap for masks
+    binary_cmap = ListedColormap(['#FCF3EE', '#68000D'])
+
+    # Set top-row titles
+    axes[0, 0].set_title('Img.', fontsize=10)
+    axes[0, 1].set_title('Conf.', fontsize=10)
+    axes[0, 2].set_title('Masks', fontsize=10)
+    axes[0, 3].set_title('Img.', fontsize=10)
+    axes[0, 4].set_title('Conf.', fontsize=10)
+    axes[0, 5].set_title('Masks', fontsize=10)
+
+    for i, density in enumerate(target_densities):
+        trial_names = selected_trials.get(density, [])
+        for j, trial_name in enumerate(trial_names[:2]):  # Use two trials per density
+            frames = trial_frames_dict[trial_name]
+            if not frames:
+                continue
+
+            # Select a random frame
+            random.seed(42)
+            frame_idx = random.randint(0, len(frames) - 1)
+            frame = frames[frame_idx]
+
+            # Prompt SAM for this frame
+            _, probs, outputs = segment_frames_sam1(
+                [frame], model_name, max_frames=1,
+                num_prompts=num_prompts, luminance_percentile=luminance_percentile
+            )
+            probs = probs[0]
+            points = outputs[0]['points']
+            masks = outputs[0]['masks']
+
+            # Plot seaweed frame with points
+            axes[i, 3*j].imshow(frame)
+            for obj_points in points:
+                for point in obj_points:
+                    axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
+                    axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=1))
+            if j == 0:
+                axes[i, 0].set_ylabel(f'{density} g/L', fontsize=10)#, labelpad=5)
+            axes[i, 3*j].set_xticks([])
+            axes[i, 3*j].set_yticks([])
+
+            # Plot probabilities
+            axes[i, 3*j + 1].imshow(probs.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
+            axes[i, 3*j + 1].set_xticks([])
+            axes[i, 3*j + 1].set_yticks([])
+
+            # Plot mask output
+            binarized_mask = (probs > conf_threshold).to(torch.uint8) * 255
+            axes[i, 3*j + 2].imshow(binarized_mask.cpu().squeeze().numpy(), cmap=binary_cmap)
+            axes[i, 3*j + 2].set_xticks([])
+            axes[i, 3*j + 2].set_yticks([])
+
+    # Adjust layout
+    plt.tight_layout()
+    output_path = os.path.join(output_folder, "model_output.png")
+    plt.savefig(output_path, dpi=200)
+    plt.savefig(os.path.join(output_folder, 'model_output.pdf'), dpi=300)
+    plt.close()
+
+    print(f"[INFO] Saved shared subplot visualization to: {output_path}")

@@ -6,7 +6,7 @@ import glob
 # Custom imports
 from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
-from src.visualization_utils import visualize_sam2_outputs, visualize_features
+from src.visualization_utils import visualize_sam2_outputs, visualize_features, plot_densities
 from src.data_exploration import analyze_data, plot_all_regressions
 from src.video_clipping import *
 
@@ -149,15 +149,15 @@ def process_video_directory(
 ## Video to frames preperation ##
 video_configs = {
     r"data/Ducks/Ulva_05_1_C.mp4": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
-    # r"data/Ducks/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)],
-    # r"data/Ducks/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
-    # r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    # r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    # r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    # r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    # r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    # r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
-    # r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
+    r"data/Ducks/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)],
+    r"data/Ducks/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
     }
 
 # Find the smallest ROI
@@ -206,6 +206,17 @@ for input_video, keep_ranges in video_configs.items():
     all_trial_frames.update(trial_frames)
 
 ## Semantic segmentation ##
+# Function to plot randomly selected frame at different densities (0.5, 1.0, 2.0, 3.0, 4.0, and 5.0 g/L)
+plot_densities(
+    all_trial_frames,
+    model_name='facebook/sam-vit-huge',
+    conf_threshold=0.5,
+    num_prompts=5,
+    luminance_percentile=10,
+    output_folder="doc"
+)
+
+# Binary segmentation of all frames
 process_video_directory(
     trial_frames_dict=all_trial_frames,
     # model_name="facebook/sam2.1-hiera-large", # SAM2 ONLY
