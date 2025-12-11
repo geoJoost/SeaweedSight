@@ -176,10 +176,11 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
     
     os.makedirs(output_folder, exist_ok=True)
 
-    # Define the densities you want to include
-    target_densities = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
+    # Densities to include
+    # target_densities = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
+    target_densities = [0.5, 2.0, 4.0, 5.0]
 
-    # Filter trials: only include trials with target densities
+    # Only include trials with target densities
     filtered_trials = []
     for trial_name in trial_frames_dict.keys():
         density = extract_density_from_trial_name(trial_name)
@@ -189,7 +190,7 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
     # Sort by density
     filtered_trials = sorted(filtered_trials, key=lambda x: extract_density_from_trial_name(x))
 
-    # Select two random trials per density
+    # Select three random trials per density
     selected_trials = {}
     for trial_name in filtered_trials:
         density = extract_density_from_trial_name(trial_name)
@@ -197,13 +198,13 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
             selected_trials[density] = []
         selected_trials[density].append(trial_name)
 
-    # Keep only two trials per density
+    # Keep only three trials per density
     for density in selected_trials:
-        selected_trials[density] = selected_trials[density][:2]
+        selected_trials[density] = selected_trials[density][:3]
 
-    # Create subplot: 6 rows (one per density), 6 columns (two sets of Image, Confidence, Masks)
+    # Create subplot: 9 columns (one per density), 6 columns (three sets of Image, Confidence, Masks)
     nrows = len(target_densities)
-    fig, axes = plt.subplots(nrows, 6, figsize=(6, 11.69))  # Portrait A4 = (8.27, 11.69)
+    fig, axes = plt.subplots(nrows, 9, figsize=(8.27, 11.69))  # Portrait A4 = (8.27, 11.69)
 
     if nrows == 1:
         axes = axes[None, :]  # Ensure axes is 2D even for a single row
@@ -212,16 +213,12 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
     binary_cmap = ListedColormap(['#FCF3EE', '#68000D'])
 
     # Set top-row titles
-    axes[0, 0].set_title('Img.', fontsize=10)
-    axes[0, 1].set_title('Conf.', fontsize=10)
-    axes[0, 2].set_title('Masks', fontsize=10)
-    axes[0, 3].set_title('Img.', fontsize=10)
-    axes[0, 4].set_title('Conf.', fontsize=10)
-    axes[0, 5].set_title('Masks', fontsize=10)
+    for col, title in enumerate(['Img.', 'Conf.', 'Masks'] * 3):
+        axes[0, col].set_title(title, fontsize=10)
 
     for i, density in enumerate(target_densities):
         trial_names = selected_trials.get(density, [])
-        for j, trial_name in enumerate(trial_names[:2]):  # Use two trials per density
+        for j, trial_name in enumerate(trial_names[:3]):  # Use three trials per density
             frames = trial_frames_dict[trial_name]
             if not frames:
                 continue
