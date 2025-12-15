@@ -12,7 +12,7 @@ from src.video_clipping import *
 
 def process_video_directory(
     # data_dirs,
-    trial_frames_dict,
+    cycle_frames_dict,
     model_name="facebook/sam2-hiera-base-plus",
     conf_threshold=0.5,
     num_prompts=5,
@@ -40,9 +40,9 @@ def process_video_directory(
         all_dfs = []
 
         # Process each directory
-        for trial_name, frames in trial_frames_dict.items():
+        for cycle_name, frames in cycle_frames_dict.items():
             print(f"{'-' * 50}")
-            print(f"[INFO] Processing trial: {trial_name} using SAM")
+            print(f"[INFO] Processing cycle: {cycle_name} using SAM")
 
             # Get dimensions of first frame to calculate total pixels
             w, h, c = frames[0].shape
@@ -52,8 +52,8 @@ def process_video_directory(
             df = pd.DataFrame()
             df['frame_id'] = list(range(len(frames)))
             df[['model_name', 'conf_threshold', 'num_prompts', 'luminance_percentile']] = model_name, conf_threshold, num_prompts, luminance_percentile
-            df['density'] = extract_density_from_dir(trial_name)
-            df['trial'] = trial_name[-1] # Takes number from names like 'Ulva_05_1_trial2'
+            df['density'] = extract_density_from_dir(cycle_name)
+            df['cycle'] = cycle_name[-1] # Takes number from names like 'Ulva_05_1_cycle2'
 
             # Prompt SAM2 for video processing
             # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
@@ -94,13 +94,13 @@ def process_video_directory(
                 # Save visualization for each frame
                 if save_files:
                     visualize_sam2_outputs(
-                        trial_name,
+                        cycle_name,
                         video_frames,
                         current_points,
                         probs,
                         current_masks,
                         frame_idx=frame_idx,
-                        data_dir=trial_name,
+                        data_dir=cycle_name,
                         output_folder=output_folder,
                         conf_threshold=conf_threshold
                     )
@@ -119,10 +119,10 @@ def process_video_directory(
             all_dfs.append(df)
 
             # Create visualization of features over entire timeseries
-            visualize_features(df, conf_threshold, trial_name, output_dir=output_folder)
-            print(f"[INFO] Finished processing {trial_name}")
+            visualize_features(df, conf_threshold, cycle_name, output_dir=output_folder)
+            print(f"[INFO] Finished processing {cycle_name}")
 
-        # Concatenate all trial DataFrames into one
+        # Concatenate all cycle DataFrames into one
         combined_df = pd.concat(all_dfs, ignore_index=True)
 
         # Save a single combined CSV
@@ -182,13 +182,13 @@ print(f"[INFO] ImageNet normalization values (in BGR):")
 print(f"[INFO] Master mean: {master_mean}")
 print(f"[INFO] Master std: {master_std}")
 
-# Split video into individual trials
-all_trial_frames = {}
+# Split video into individual cycles (i.e., collection of individual frames grouped per round of floating device)
+all_cycle_frames = {}
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
 
     # Process .avi
-    trial_frames = process_video_n_frames(input_video, # .avi file
+    cycle_frames = process_video_n_frames(input_video, # .avi file
                            # Frame specificatrions
                            seconds_interval=8.0,
                            keep_ranges=keep_ranges, 
@@ -203,12 +203,12 @@ for input_video, keep_ranges in video_configs.items():
                            # Save frames
                            save_files=False
                            )
-    all_trial_frames.update(trial_frames)
+    all_cycle_frames.update(cycle_frames)
 
 ## Semantic segmentation ##
 # Binary segmentation of all frames
 process_video_directory(
-    trial_frames_dict=all_trial_frames,
+    cycle_frames_dict=all_cycle_frames,
     # model_name="facebook/sam2.1-hiera-large", # SAM2 ONLY
     model_name='facebook/sam-vit-huge', # SAM1 ONLY
     conf_threshold=0.5,
@@ -221,7 +221,7 @@ process_video_directory(
 
 # Function to plot randomly selected frame at different densities (0.5, 1.0, 2.0, 3.0, 4.0, and 5.0 g/L)
 plot_densities(
-    all_trial_frames,
+    all_cycle_frames,
     model_name='facebook/sam-vit-huge',
     conf_threshold=0.5,
     num_prompts=5,

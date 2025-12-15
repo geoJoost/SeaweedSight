@@ -107,7 +107,7 @@ def create_luminance_prompts(frame, existing_masks=None, num_prompts=5, luminanc
 
 def extract_density_from_dir(data_dir):
     """
-    Extract density (g/L) from directory name (e.g., Ulva_05_1_trial1 -> 0.5).
+    Extract density (g/L) from directory name (e.g., Ulva_05_1_cyclel1 -> 0.5).
     """
     match = re.search(r'Ulva_(\d+)', data_dir)
     if match:

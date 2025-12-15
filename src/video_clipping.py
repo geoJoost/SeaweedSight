@@ -1,4 +1,4 @@
-"""Script for pre-processing of video data by splitting into individual trials 
+"""Script for pre-processing of video data by splitting into individual cycles 
 """
 
 import cv2
@@ -310,7 +310,7 @@ def process_video_to_frames(
     - Selects 1 frame per second (or as specified).
     - Removes specified frame ranges.
     - Splits the result into three parts based on the remove ranges.
-    - Saves frames as .jpg in folders: data/Ulva_DENSITY_1_trial1/, etc.
+    - Saves frames as .jpg in folders: data/Ulva_DENSITY_1_cycle1/, etc.
 
     Args:
         input_path: Path to the input .avi file.
@@ -336,15 +336,15 @@ def process_video_to_frames(
 
     # Generate output directory names
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    trial_dirs = [os.path.join(output_dir, f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
+    cycle_dirs = [os.path.join(output_dir, f"{base_name}_cycle{i+1}") for i in range(len(keep_ranges))]
 
     # Create output directories if they don't exist
-    for d in trial_dirs:
+    for d in cycle_dirs:
         os.makedirs(d, exist_ok=True)
 
     frame_count = 0
-    current_trial = 0
-    frame_number = 0 # Frame number within the current trial
+    current_cycle = 0
+    frame_number = 0 # Frame number within the current cycle
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -358,14 +358,14 @@ def process_video_to_frames(
 
         # Check if the current frame is in any of the keep ranges
         in_keep_range = False
-        for trial_idx, (start, end) in enumerate(keep_ranges):
+        for cycle_idx, (start, end) in enumerate(keep_ranges):
             # Check if the frame is within the current keep range
             if start <= frame_count <= (end if end is not None else float('inf')):
                 in_keep_range = True
-                # Switch trials if necessary
-                if trial_idx != current_trial:
-                    current_trial = trial_idx
-                    frame_number = 0  # Reset frame number for the new trial
+                # Switch cycles if necessary
+                if cycle_idx != current_cycle:
+                    current_cycle = cycle_idx
+                    frame_number = 0  # Reset frame number for the new cycle
                 break
 
         if not in_keep_range:
@@ -373,7 +373,7 @@ def process_video_to_frames(
             continue  # Skip frames not in any keep range
 
         # Save the frame
-        frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
+        frame_path = os.path.join(cycle_dirs[current_cycle], f"{frame_number:06d}.jpg")
         cv2.imwrite(frame_path, frame)
 
         # Increment counters
@@ -381,7 +381,7 @@ def process_video_to_frames(
         frame_count += 1
 
     cap.release()
-    print(f"[INFO] Frames saved in: {', '.join(trial_dirs)}")
+    print(f"[INFO] Frames saved in: {', '.join(cycle_dirs)}")
 
 def process_video_n_frames(
     input_path: str,
@@ -401,7 +401,7 @@ def process_video_n_frames(
     - Removes specified frame ranges.
     - Splits the result into parts based on the keep ranges.
     - Optionally normalizes frames to match a master's color distribution.
-    - Saves frames as .jpg in folders: data/Ulva_DENSITY_1_trial1/, etc.
+    - Saves frames as .jpg in folders: data/Ulva_DENSITY_1_cycle1/, etc.
 
     Args:
         input_path (str): Path to the input .avi file.
@@ -440,15 +440,15 @@ def process_video_n_frames(
     
     # Create output directories
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    trial_dirs = [os.path.join(output_dir, "intermediate", f"{base_name}_trial{i+1}") for i in range(len(keep_ranges))]
-    for d in trial_dirs:
+    cycle_dirs = [os.path.join(output_dir, "intermediate", f"{base_name}_cycle{i+1}") for i in range(len(keep_ranges))]
+    for d in cycle_dirs:
         os.makedirs(d, exist_ok=True)
 
     # Tracking variables
     frame_count = 0
-    current_trial = 0
+    current_cycle = 0
     frame_number = 0
-    trial_frames = {f"{base_name}_trial{i+1}": [] for i in range(len(keep_ranges))} # Store arrays for downstream inference
+    cycle_frames = {f"{base_name}_cycle{i+1}": [] for i in range(len(keep_ranges))} # Store arrays for downstream inference
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -457,11 +457,11 @@ def process_video_n_frames(
 
         # Check if the current frame is in any of the keep ranges
         in_keep_range = False
-        for trial_idx, (start, end) in enumerate(keep_ranges):
+        for cycle_idx, (start, end) in enumerate(keep_ranges):
             if start <= frame_count <= (end if end is not None else float('inf')):
                 in_keep_range = True
-                if trial_idx != current_trial:
-                    current_trial = trial_idx
+                if cycle_idx != current_cycle:
+                    current_cycle = cycle_idx
                     frame_number = 0
                 break
 
@@ -489,10 +489,10 @@ def process_video_n_frames(
             
             # Save the frame to folder
             if save_files:
-                frame_path = os.path.join(trial_dirs[current_trial], f"{frame_number:06d}.jpg")
+                frame_path = os.path.join(cycle_dirs[current_cycle], f"{frame_number:06d}.jpg")
                 cv2.imwrite(frame_path, clipped_frame)
             
-            trial_frames[f"{base_name}_trial{current_trial+1}"].append(clipped_frame.copy())
+            cycle_frames[f"{base_name}_cycle{current_cycle+1}"].append(clipped_frame.copy())
             frame_number += 1
 
         frame_count += 1
@@ -500,5 +500,5 @@ def process_video_n_frames(
     cap.release()
     print(f"[INFO] Finished processing of {input_path}")
     if save_files:
-        print(f"[INFO] Frames saved in: {', '.join(trial_dirs)}")
-    return trial_frames
+        print(f"[INFO] Frames saved in: {', '.join(cycle_dirs)}")
+    return cycle_frames

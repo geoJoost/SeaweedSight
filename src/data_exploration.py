@@ -315,26 +315,26 @@ def analyze_data(df, features, output_folder='.'):
     df_plot = df.copy()
 
     # Pre-process for cumulative surface area
-    max_surface = df.groupby(['density', 'trial'], as_index=False)['cumulative_surface_area'].max()
-    df_plot = df_plot.drop(columns=['cumulative_surface_area']).merge(max_surface, on=['density', 'trial'], how='left')
+    max_surface = df.groupby(['density', 'cycle'], as_index=False)['cumulative_surface_area'].max()
+    df_plot = df_plot.drop(columns=['cumulative_surface_area']).merge(max_surface, on=['density', 'cycle'], how='left')
 
     # 1. Per-frame (linear)
     plot_features_vs_density(df_plot, features, output_name="per_frame", scatter_color='#219ebc', curve='')
 
-    # 2. Per-trial (linear)
-    df_grouped = df_plot.groupby(['density', 'trial'], as_index=False)[features].mean()
+    # 2. Per-cycle (linear)
+    df_grouped = df_plot.groupby(['density', 'cycle'], as_index=False)[features].mean()
     plot_features_vs_density(df_grouped, features, output_name="per_cycle", scatter_color='#606c38', curve='')
 
     # 3. Per-frame (log)
     plot_features_vs_density(df_plot, features, output_name="per_frame", scatter_color='#fb8500', curve='log')
 
-    # 4. Per-trial (log)
+    # 4. Per-cycle (log)
     plot_features_vs_density(df_grouped, features, output_name="per_cycle", scatter_color='#8b5cf6', curve='log')
 
     # 5. Per-frame (power-law)
     plot_features_vs_density(df_plot, features, output_name="per_frame", scatter_color='#fb8500', curve='pow')
 
-    # 6. Per-trial (power-law)
+    # 6. Per-cycle (power-law)
     plot_features_vs_density(df_grouped, features, output_name="per_cycle", scatter_color='#8b5cf6', curve='pow')
 
 def plot_all_regressions(df, features, feature_names, output_folder='doc'):
@@ -344,7 +344,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     """
     # Prepare data for per-frame and per-cycle analyses
     df_per_frame = df.copy()
-    df_per_cycle = df.groupby(['density', 'trial'], as_index=False)[features].mean()
+    df_per_cycle = df.groupby(['density', 'cycle'], as_index=False)[features].mean()
 
     # Create figure with shared y-axes (now for density)
     fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 1.8*len(features)), sharey=True, sharex='row')

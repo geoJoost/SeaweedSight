@@ -160,16 +160,16 @@ def visualize_features(df, conf_threshold, data_dir, output_dir):
     print(f"[INFO] Saved feature trends plot to: {plot_path}")
     return plot_path
 
-def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompts=5, luminance_percentile=10, output_folder="doc"):
+def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompts=5, luminance_percentile=10, output_folder="doc"):
     """
     Plot a random frame from each density in a shared subplot.
     Each row is a density, and each column is frame, probabilities, and mask.
     """
     from src.sam_prompter import segment_frames_sam1
 
-    def extract_density_from_trial_name(trial_name):
-        """Extract density from trial name (e.g., Ulva_05_1_C_trial1 -> 0.5)"""
-        match = re.search(r'Ulva_(\d+)_', trial_name)
+    def extract_density_from_cycle_name(cycle_name):
+        """Extract density from cycle name (e.g., Ulva_05_1_C_cycle1 -> 0.5)"""
+        match = re.search(r'Ulva_(\d+)_', cycle_name)
         if match:
             return float(match.group(1)) / 10
         return 0.0
@@ -180,27 +180,27 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
     # target_densities = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
     target_densities = [0.5, 2.0, 4.0, 5.0]
 
-    # Only include trials with target densities
-    filtered_trials = []
-    for trial_name in trial_frames_dict.keys():
-        density = extract_density_from_trial_name(trial_name)
+    # Only include cycles with target densities
+    filtered_cycles = []
+    for cycle_name in cycle_frames_dict.keys():
+        density = extract_density_from_cycle_name(cycle_name)
         if density in target_densities:
-            filtered_trials.append(trial_name)
+            filtered_cycles.append(cycle_name)
 
     # Sort by density
-    filtered_trials = sorted(filtered_trials, key=lambda x: extract_density_from_trial_name(x))
+    filtered_cycles = sorted(filtered_cycles, key=lambda x: extract_density_from_cycle_name(x))
 
-    # Select three random trials per density
-    selected_trials = {}
-    for trial_name in filtered_trials:
-        density = extract_density_from_trial_name(trial_name)
-        if density not in selected_trials:
-            selected_trials[density] = []
-        selected_trials[density].append(trial_name)
+    # Select three random cycles per density
+    selected_cycles = {}
+    for cycle_name in filtered_cycles:
+        density = extract_density_from_cycle_name(cycle_name)
+        if density not in selected_cycles:
+            selected_cycles[density] = []
+        selected_cycles[density].append(cycle_name)
 
-    # Keep only three trials per density
-    for density in selected_trials:
-        selected_trials[density] = selected_trials[density][:3]
+    # Keep only three cycles per density
+    for density in selected_cycles:
+        selected_cycles[density] = selected_cycles[density][:3]
 
     # Create subplot: 9 columns (one per density), 6 columns (three sets of Image, Confidence, Masks)
     nrows = len(target_densities)
@@ -217,9 +217,9 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
         axes[0, col].set_title(title, fontsize=10)
 
     for i, density in enumerate(target_densities):
-        trial_names = selected_trials.get(density, [])
-        for j, trial_name in enumerate(trial_names[:3]):  # Use three trials per density
-            frames = trial_frames_dict[trial_name]
+        cycle_names = selected_cycles.get(density, [])
+        for j, cycle_name in enumerate(cycle_names[:3]):  # Use three cycles per density
+            frames = cycle_frames_dict[cycle_name]
             if not frames:
                 continue
 
