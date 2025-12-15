@@ -263,7 +263,7 @@ def plot_densities(trial_frames_dict, model_name, conf_threshold=0.5, num_prompt
     plt.tight_layout()
     output_path = os.path.join(output_folder, "model_output.png")
     plt.savefig(output_path, dpi=200)
-    plt.savefig(os.path.join(output_folder, 'model_output.pdf'), dpi=300)
+    plt.savefig(os.path.join(output_folder, 'model_output.pdf'), dpi=600)
     plt.close()
 
     print(f"[INFO] Saved shared subplot visualization to: {output_path}")

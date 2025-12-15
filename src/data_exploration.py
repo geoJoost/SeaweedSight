@@ -50,6 +50,9 @@ def fit_logarithmic_regression(x, y, ax, scatter_color):
         ss_tot = np.sum((y - np.mean(y))**2)
         r_squared = 1 - (ss_res / ss_tot)
 
+        # Calculate RMSE
+        rmse_val = np.sqrt(np.mean(residuals**2))
+
         # Calculate degrees of freedom
         n = len(x)
         p = len(popt)
@@ -64,11 +67,11 @@ def fit_logarithmic_regression(x, y, ax, scatter_color):
         t_values = popt / std_errors
         p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
 
-        return r_squared, p_values[1]
+        return r_squared, p_values[1], rmse_val
     except RuntimeError:
         print(f"\n\n[ERROR] Logarithmic curve fit failed")
         sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
-        return None, None
+        return None, None, None
 
 def fit_power_law_regression(x, y, ax, scatter_color):
     """Fit and plot a power-law regression, returning R² and p-values."""
@@ -84,13 +87,16 @@ def fit_power_law_regression(x, y, ax, scatter_color):
         # Plot fitted logarithmic curve
         x_fit = np.linspace(x.min(), x.max(), 100)
         y_fit = power_law_curve(x_fit, *popt)
-        ax.plot(x_fit, y_fit, color='red', label=f'Power-law curve: y = {a:.2f} ln(x) + {b:.2f}')
+        ax.plot(x_fit, y_fit, color='red', label=f'Power curve: y = {a:.2f} ln(x) + {b:.2f}')
 
         # Calculate R²
         residuals = y - power_law_curve(x, *popt)
         ss_res = np.sum(residuals**2)
         ss_tot = np.sum((y - np.mean(y))**2)
         r_squared = 1 - (ss_res / ss_tot)
+
+        # Calculate RMSE
+        rmse_val = np.sqrt(np.mean(residuals**2))
 
         # Calculate degrees of freedom
         n = len(x)
@@ -106,15 +112,15 @@ def fit_power_law_regression(x, y, ax, scatter_color):
         t_values = popt / std_errors
         p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
 
-        return r_squared, p_values[1]
+        return r_squared, p_values[1], rmse_val
     except RuntimeError:
-        print(f"\n\n[ERROR] Power-law curve fit failed")
+        print(f"\n\n[ERROR] Power curve fit failed")
         sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
-        return None, None
+        return None, None, None
 
 def plot_regression(df, features, output_name, output_folder='doc', scatter_color='#219ebc', curve=''):
     """
-    Compute and plot linear or power-law curve regression for each feature vs. density.
+    Compute and plot linear or power curve regression for each feature vs. density.
     Prints regression summaries and saves plots.
     """
     print(f"{'-' * 50}")
@@ -133,17 +139,18 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
 
         if curve == 'log':
             # Fit logarithmic curve
-            r_squared, p_value = fit_logarithmic_regression(x, y, ax, scatter_color)
+            r_squared, p_value, rmse_val = fit_logarithmic_regression(x, y, ax, scatter_color)
             print(f"\n[INFO] Logarithmic regression for {feature}:")
             print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}")
-            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f})')
+            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L)', fontsize=10)
         
         elif curve == 'pow':
             # Fit power-law curve
-            r_squared, p_value = fit_power_law_regression(x, y, ax, scatter_color)
-            print(f"\n[INFO] Power-law regression for {feature}:")
-            print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}")
-            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f})')
+            r_squared, p_value, rmse_val = fit_power_law_regression(x, y, ax, scatter_color)
+
+            print(f"\n[INFO] Power regression for {feature}:")
+            print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L")
+            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L)', fontsize=10)
 
         else:
             # Fit linear regression
@@ -164,7 +171,7 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
             else:
                 p_value_str = f"{p_value:.3f}"
             
-            # Print results in your desired format
+            # Print results
             print(f"\n[INFO] Linear regression for {feature}:")
             print(f"R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
 
@@ -175,7 +182,7 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
             sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color': scatter_color}, line_kws={'color':'red'})
 
             # Add R² as text
-            ax.set_title(f'{feature} (R² = {model.rsquared:.2f}, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f})')
+            ax.set_title(f'{feature} (R² = {model.rsquared:.2f}, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f})', fontsize=10)
 
         ax.set_ylabel('Density [g/L]')
         ax.set_xlabel(feature)
@@ -339,27 +346,25 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     df_per_frame = df.copy()
     df_per_cycle = df.groupby(['density', 'trial'], as_index=False)[features].mean()
 
-    # Create figure with shared y-axes
-    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 1.8*len(features)),
-                            sharey='row', sharex='col')
-
+    # Create figure with shared y-axes (now for density)
+    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 1.8*len(features)), sharey=True, sharex='row')
     if len(features) == 1:
         axes = axes.reshape(1, -1)  # Ensure 2D array even with 1 feature
 
     # Define colors and analysis configurations
     colors = {
         'Per-frame | Linear': '#219ebc',
-        'Per-frame | Log-linear': '#fb8500',
+        'Per-frame | Power': '#fb8500',
         'Per-cycle | Linear': '#606c38',
-        'Per-cycle | Log-linear': '#8b5cf6'
+        'Per-cycle | Power': '#8b5cf6'
     }
 
     # Column titles
     col_titles = [
         'Per-frame | Linear',
-        'Per-frame | Log-linear',
+        'Per-frame | Power',
         'Per-cycle | Linear',
-        'Per-cycle | Log-linear'
+        'Per-cycle | Power'
     ]
 
     # Set column titles
@@ -370,52 +375,43 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     for i, (feature, feature_name) in enumerate(zip(features, feature_names)):
         for j, (analysis_type, df_analysis, reg_type) in enumerate([
             ('Per-frame', df_per_frame, 'Linear'),
-            ('Per-frame', df_per_frame, 'Log-linear'),
+            ('Per-frame', df_per_frame, 'Power'),
             ('Per-cycle', df_per_cycle, 'Linear'),
-            ('Per-cycle', df_per_cycle, 'Log-linear')
+            ('Per-cycle', df_per_cycle, 'Power')
         ]):
             ax = axes[i, j]
-            x = df_analysis['density']
-            y = df_analysis[feature]
+            # Switch x and y: y is density, x is feature
+            y = df_analysis['density']
+            x = df_analysis[feature]
 
-            # For total surface area, use million formatter
-            ax.yaxis.set_major_formatter(mtick.EngFormatter(unit=''))
-
-            # Configure x-ticks: only bottom row gets ticks and labels
-            if i == len(features) - 1:
-                ax.set_xticks([1, 2, 3, 4, 5])
-            else:
-                ax.set_xticks([])
+            # Set Y-axis ticks for density (shared across all subplots)
+            ax.set_yticks([1, 2, 3, 4, 5])
+            ax.set_ylim(0, 5.5)  # Ensure consistent Y-axis range
 
             # Completely disable per-frame plots for cumulative surface area
-            if feature_name == "Cumulative surface area" and j in (0, 1):
-
-                # Break sharey/sharex links so the axes stops being re-populated automatically
-                ax._shared_x_refs = []
-                ax._shared_y_refs = []
-
-                # Fully clear the axes including shared elements
+            if "tot. surface area" in feature_name.lower() and j in (0, 1):
+                #ax._shared_x_refs = []
+                #ax._shared_y_refs = []
                 ax.cla()
-
-                # Turn off ticks and frame
-                #ax.set_xticks([])
-                #ax.set_yticks([])
-                #ax.set_xlabel('')
-                #ax.set_ylabel('')
+                # ax.set_xticks([])  # Remove x-tick marks
+                # ax.set_yticks([])  # Remove y-tick marks
+                ax.set_xlabel('')  # Remove x-axis label
+                ax.set_ylabel('')  # Remove y-axis label
                 ax.set_frame_on(True)
-
                 ax.text(0.5, 0.5, "Per-cycle only.", ha="center", va="center", fontsize=10, transform=ax.transAxes)
-
-                
                 if j == 0:
-                    ax.set_ylabel("Tot. surface area [px]", fontsize=10, labelpad=5)
+                    ax.set_ylabel("Density [g/L]", fontsize=10, labelpad=5)
                 continue
+
+            # For surface area features, use million formatter on X-axis
+            if "tot. surface area" in feature_name.lower():
+                ax.xaxis.set_major_formatter(mtick.EngFormatter(unit=''))
 
             # Plot data
             scatter_color = colors[col_titles[j]]
-            log_curve = 'Log' in reg_type
+            power_curve = 'Pow' in reg_type
 
-            if log_curve:
+            if power_curve:
                 fit_power_law_regression(x, y, ax, scatter_color)
             else:
                 X = sm.add_constant(x)
@@ -425,23 +421,30 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             # Add grid
             ax.grid(True, linestyle='--', alpha=0.3)
 
-            # Only first column gets a ylabel
+            # Only first column gets a ylabel (density)
             if j == 0:
-                ax.set_ylabel(feature_name, fontsize=10, labelpad=5)
+                ax.set_ylabel("Density [g/L]", fontsize=10, labelpad=5)
             else:
                 ax.set_ylabel('')
 
-            # Only bottom row gets the x-label
-            if i < len(features) - 1:
-                ax.set_xlabel('')
-            else:
-                ax.set_xlabel('Density [g/L]', fontsize=10)
+            # Only bottom row gets the x-label (feature name)
+            ax.set_xlabel(feature_name, fontsize=10)
+
+            # # Show X-axis tick marks for the second row, third and fourth columns
+            # if i == 1 and j in (2, 3):
+            #     ax.set_xticks(ax.get_xticks())
+            #     ax.tick_params(axis='x', which='both', bottom=True, top=False, labelbottom=True)
+            #     ax.set_xlabel("Tot. surface area [px]")
+            #if i == len(features) - 1:
+            #    ax.set_xlabel(feature_name, fontsize=10, labelpad=5)
+            #else:
+            #    ax.set_xlabel('')
 
     # Adjust layout
     fig.align_ylabels()
     plt.tight_layout()
     plt.savefig(os.path.join(output_folder, 'all_regressions.png'), dpi=200, bbox_inches='tight')
-    plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=600, bbox_inches='tight')
     plt.close()
 
     print(f"[INFO] Finished printing shared regression plot to {output_folder}")

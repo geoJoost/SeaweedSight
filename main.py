@@ -132,7 +132,7 @@ def process_video_directory(
     # Compute correlation
     combined_df = pd.read_csv(output_csv)
     features = ['surface_area_pct', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
-    feature_names = ['Surface area [%]', 'Cumulative surface area', 'Red', 'Green', 'Blue', 'Luminance', 'a*', 'b*']
+    feature_names = ['Surface area [%]', 'Tot. surface area [px]', 'Red', 'Green', 'Blue', 'Luminance', 'a*', 'b*']
 
     # Combined regressors plot
     plot_all_regressions(combined_df, features, feature_names, output_folder='doc')
