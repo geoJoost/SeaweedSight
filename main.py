@@ -163,32 +163,13 @@ video_configs = {
 # Find the smallest ROI
 roi_width, roi_height = find_smallest_roi(video_configs)
 
-# Get normalization statistics for colour correction
-# normalization_area = (150, 35, 100, 50) # Small square in center-top of the image
-normalization_area = (0, 100, 400, 800) # Main ROI covering 95% of entire frame (except sides)
-master_mean, master_std = get_master_stats(r"data/Ducks/Ulva_05_1_C.mp4", roi_width, roi_height, normalization_area)
-
-# Instead of normalization parameters from .avi, use ImageNet instead
-# Values are: mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225] for RGB
-# ImageNet mean and std for [0, 1] range (RGB order)
-mean_rgb = [0.485, 0.456, 0.406]
-std_rgb = [0.229, 0.224, 0.225]
-
-# Scale to [0, 255] range and switch to BGR order
-master_mean = np.array([m * 255 for m in mean_rgb][::-1])
-master_std = np.array([s * 255 for s in std_rgb][::-1])
-
-print(f"[INFO] ImageNet normalization values (in BGR):")
-print(f"[INFO] Master mean: {master_mean}")
-print(f"[INFO] Master std: {master_std}")
-
 # Split video into individual cycles (i.e., collection of individual frames grouped per round of floating device)
 all_cycle_frames = {}
 for input_video, keep_ranges in video_configs.items():
     print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
 
     # Process .avi
-    cycle_frames = process_video_n_frames(input_video, # .avi file
+    cycle_frames = process_video_n_seconds(input_video, # .avi file
                            # Frame specificatrions
                            seconds_interval=8.0,
                            keep_ranges=keep_ranges, 
