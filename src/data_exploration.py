@@ -1,23 +1,17 @@
 """ Script for graphs, etc"""
-import seaborn as sns
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
+import numpy as np
 import os
-import statsmodels.api as sm
 import pandas as pd
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-import numpy as np
-import matplotlib.ticker as mtick
-
-import statsmodels.api as sm
-import seaborn as sns
 import matplotlib.pyplot as plt
-import os
-import numpy as np
+import matplotlib.ticker as mtick
+import seaborn as sns
+from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit
 from scipy.stats import t
-from matplotlib.lines import Line2D
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.eval_measures import rmse
 
 def logarithmic_curve(x, a, b):
@@ -84,7 +78,7 @@ def fit_power_law_regression(x, y, ax, scatter_color):
         # Plot scatter points
         sns.scatterplot(x=x, y=y, ax=ax, alpha=0.5, color=scatter_color)
 
-        # Plot fitted logarithmic curve
+        # Plot fitted power curve
         x_fit = np.linspace(x.min(), x.max(), 100)
         y_fit = power_law_curve(x_fit, *popt)
         ax.plot(x_fit, y_fit, color='red', label=f'Power curve: y = {a:.2f} ln(x) + {b:.2f}')
@@ -142,15 +136,15 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
             r_squared, p_value, rmse_val = fit_logarithmic_regression(x, y, ax, scatter_color)
             print(f"\n[INFO] Logarithmic regression for {feature}:")
             print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}")
-            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L)', fontsize=10)
+            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$)', fontsize=10)
         
         elif curve == 'pow':
             # Fit power-law curve
             r_squared, p_value, rmse_val = fit_power_law_regression(x, y, ax, scatter_color)
 
             print(f"\n[INFO] Power regression for {feature}:")
-            print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L")
-            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g/L)', fontsize=10)
+            print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$")
+            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$)', fontsize=10)
 
         else:
             # Fit linear regression
@@ -173,18 +167,18 @@ def plot_regression(df, features, output_name, output_folder='doc', scatter_colo
             
             # Print results
             print(f"\n[INFO] Linear regression for {feature}:")
-            print(f"R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
+            print(f"R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g L$^{-1}$")
 
             # Print regression summary
-            # print(f"\n\n[INFO] \n{model.summary(alpha=0.05)}")
+            print(f"\n\n[INFO] \n{model.summary(alpha=0.05)}")
 
             # Scatter plot with regression line
             sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color': scatter_color}, line_kws={'color':'red'})
 
             # Add R² as text
-            ax.set_title(f'{feature} (R² = {model.rsquared:.2f}, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f})', fontsize=10)
+            ax.set_title(f'{feature} (R² = {model.rsquared:.2f}, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$)', fontsize=10)
 
-        ax.set_ylabel('Density [g/L]')
+        ax.set_ylabel('Density [g L$^{-1}$]')
         ax.set_xlabel(feature)
         ax.legend()
 
@@ -217,7 +211,7 @@ def plot_correlation(df, correlations, features, output_name, output_folder='doc
         # Add correlation as text
         corr = correlations[feature]
         ax.set_title(f'{feature} (r = {corr:.2f})')
-        ax.set_xlabel('Density [g/L]')
+        ax.set_xlabel('Density [g L$^{-1}$]')
         ax.set_ylabel(feature)
 
     # Hide unused subplots
@@ -400,7 +394,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
                 ax.set_frame_on(True)
                 ax.text(0.5, 0.5, "Per-cycle only.", ha="center", va="center", fontsize=10, transform=ax.transAxes)
                 if j == 0:
-                    ax.set_ylabel("Density [g/L]", fontsize=10, labelpad=5)
+                    ax.set_ylabel("Density [g L$^{-1}$]", fontsize=10, labelpad=5)
                 continue
 
             # For surface area features, use million formatter on X-axis
@@ -416,35 +410,26 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             else:
                 X = sm.add_constant(x)
                 model = sm.OLS(y, X).fit()
-                sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
+                sns.regplot(x=x, y=y, ax=ax, ci=None, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
 
             # Add grid
             ax.grid(True, linestyle='--', alpha=0.3)
 
             # Only first column gets a ylabel (density)
             if j == 0:
-                ax.set_ylabel("Density [g/L]", fontsize=10, labelpad=5)
+                ax.set_ylabel("Density [g L$^{-1}$]", fontsize=10, labelpad=5)
             else:
                 ax.set_ylabel('')
 
             # Only bottom row gets the x-label (feature name)
             ax.set_xlabel(feature_name, fontsize=10)
 
-            # # Show X-axis tick marks for the second row, third and fourth columns
-            # if i == 1 and j in (2, 3):
-            #     ax.set_xticks(ax.get_xticks())
-            #     ax.tick_params(axis='x', which='both', bottom=True, top=False, labelbottom=True)
-            #     ax.set_xlabel("Tot. surface area [px]")
-            #if i == len(features) - 1:
-            #    ax.set_xlabel(feature_name, fontsize=10, labelpad=5)
-            #else:
-            #    ax.set_xlabel('')
-
     # Adjust layout
     fig.align_ylabels()
     plt.tight_layout()
     plt.savefig(os.path.join(output_folder, 'all_regressions.png'), dpi=200, bbox_inches='tight')
-    plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=600, bbox_inches='tight')
+    # plt.savefig(os.path.join(output_folder, 'all_regressions.pdf'), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, 'all_regressions.eps'), bbox_inches='tight')
     plt.close()
 
     print(f"[INFO] Finished printing shared regression plot to {output_folder}")

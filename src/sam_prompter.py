@@ -1,13 +1,8 @@
 """Script for prompting SAM1/SAM2 for video/image segmentation """
 
-import os
 import torch
 from transformers import Sam2VideoModel, Sam2VideoProcessor
-from transformers import Sam2Model, Sam2Processor, Sam2ImageProcessorFast
 from transformers import SamModel, SamProcessor
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
 
 # Custom imports
 from src.data_utils import load_video_frames, create_luminance_prompts

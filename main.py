@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import os
-import glob
 
 # Custom imports
 from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
@@ -171,18 +170,12 @@ for input_video, keep_ranges in video_configs.items():
     # Process .avi
     cycle_frames = process_video_n_seconds(input_video, # .avi file
                            # Frame specificatrions
-                           seconds_interval=8.0,
+                           seconds_interval=5.0,
                            keep_ranges=keep_ranges, 
                            roi=(roi_width, roi_height),
 
-                           # Normalization parameters
-                           normalize=False,
-                           normalization_area=normalization_area,
-                           master_mean=master_mean,
-                           master_std=master_std,
-
                            # Save frames
-                           save_files=False
+                           save_files=True
                            )
     all_cycle_frames.update(cycle_frames)
 

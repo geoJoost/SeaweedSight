@@ -1,21 +1,13 @@
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-import torch
-import cv2
-import os
-import torch
 import cv2
 import numpy as np
+import os
 import random
+import re
+import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Circle
-import torch
-import re
 
-# Custom imports
 def visualize_luminance_prompts(frame, l, dark_regions, points, luminance_threshold, output_path="doc/prompt_experiment_luminance.png"):
     """
     Visualize the original frame, luminance channel, dark regions, and connected components.
@@ -244,7 +236,7 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
                     axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
                     axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=1))
             if j == 0:
-                axes[i, 0].set_ylabel(f'{density} g/L', fontsize=10)#, labelpad=5)
+                axes[i, 0].set_ylabel(f'{density} g L$^{-1}$', fontsize=10)#, labelpad=5)
             axes[i, 3*j].set_xticks([])
             axes[i, 3*j].set_yticks([])
 
@@ -261,9 +253,9 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
 
     # Adjust layout
     plt.tight_layout()
-    output_path = os.path.join(output_folder, "model_output.png")
-    plt.savefig(output_path, dpi=200)
-    plt.savefig(os.path.join(output_folder, 'model_output.pdf'), dpi=600)
+    output_path = os.path.join(output_folder, "model_output.eps")
+    plt.savefig(output_path, format='eps')
+    plt.savefig(os.path.join(output_folder, 'model_output.png'), dpi=600)
     plt.close()
 
     print(f"[INFO] Saved shared subplot visualization to: {output_path}")
