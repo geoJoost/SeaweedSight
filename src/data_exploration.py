@@ -76,12 +76,12 @@ def fit_power_law_regression(x, y, ax, scatter_color):
         a, b = popt
 
         # Plot scatter points
-        sns.scatterplot(x=x, y=y, ax=ax, alpha=0.5, color=scatter_color)
+        sns.scatterplot(x=x, y=y, ax=ax, alpha=1.0, color=scatter_color, linewidth=0, s=5)
 
         # Plot fitted power curve
         x_fit = np.linspace(x.min(), x.max(), 100)
         y_fit = power_law_curve(x_fit, *popt)
-        ax.plot(x_fit, y_fit, color='red', label=f'Power curve: y = {a:.2f} ln(x) + {b:.2f}')
+        ax.plot(x_fit, y_fit, color='#000000', lw=1, label=f'Power curve: y = {a:.2f} ln(x) + {b:.2f}')
 
         # Calculate R²
         residuals = y - power_law_curve(x, *popt)
@@ -109,7 +109,7 @@ def fit_power_law_regression(x, y, ax, scatter_color):
         return r_squared, p_values[1], rmse_val
     except RuntimeError:
         print(f"\n\n[ERROR] Power curve fit failed")
-        sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
+        sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red', 'linewidth':1})
         return None, None, None
 
 def plot_regression(df, features, output_name, output_folder='doc', scatter_color='#219ebc', curve=''):
@@ -341,7 +341,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     df_per_cycle = df.groupby(['density', 'cycle'], as_index=False)[features].mean()
 
     # Create figure with shared y-axes (now for density)
-    fig, axes = plt.subplots(len(features), 4, figsize=(7.5, 1.8*len(features)), sharey=True, sharex='row')
+    fig, axes = plt.subplots(len(features), 4, figsize=(6, 9.3), sharey=True, sharex='row')
     if len(features) == 1:
         axes = axes.reshape(1, -1)  # Ensure 2D array even with 1 feature
 
@@ -349,29 +349,29 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     colors = {
         'Per-frame | Linear': '#219ebc',
         'Per-frame | Power': '#fb8500',
-        'Per-cycle | Linear': '#606c38',
-        'Per-cycle | Power': '#8b5cf6'
+        'Per-revolution | Linear': '#606c38',
+        'Per-revolution | Power': '#8b5cf6'
     }
 
     # Column titles
     col_titles = [
         'Per-frame | Linear',
         'Per-frame | Power',
-        'Per-cycle | Linear',
-        'Per-cycle | Power'
+        'Per-revolution | Linear',
+        'Per-revolution | Power'
     ]
 
     # Set column titles
     for ax, col_title in zip(axes[0], col_titles):
-        ax.set_title(col_title, fontsize=10, pad=5, ha='center')
+        ax.set_title(col_title, fontsize=8, pad=5, ha='center')
 
     # Plot each feature
     for i, (feature, feature_name) in enumerate(zip(features, feature_names)):
         for j, (analysis_type, df_analysis, reg_type) in enumerate([
             ('Per-frame', df_per_frame, 'Linear'),
             ('Per-frame', df_per_frame, 'Power'),
-            ('Per-cycle', df_per_cycle, 'Linear'),
-            ('Per-cycle', df_per_cycle, 'Power')
+            ('Per-revolution', df_per_cycle, 'Linear'),
+            ('Per-revolution', df_per_cycle, 'Power')
         ]):
             ax = axes[i, j]
             # Switch x and y: y is density, x is feature
@@ -381,6 +381,7 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             # Set Y-axis ticks for density (shared across all subplots)
             ax.set_yticks([1, 2, 3, 4, 5])
             ax.set_ylim(0, 5.5)  # Ensure consistent Y-axis range
+            ax.tick_params(axis='both', labelsize=8)
 
             # Completely disable per-frame plots for cumulative surface area
             if "tot. surface area" in feature_name.lower() and j in (0, 1):
@@ -392,9 +393,9 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
                 ax.set_xlabel('')  # Remove x-axis label
                 ax.set_ylabel('')  # Remove y-axis label
                 ax.set_frame_on(True)
-                ax.text(0.5, 0.5, "Per-cycle only.", ha="center", va="center", fontsize=10, transform=ax.transAxes)
+                ax.text(0.5, 0.5, "Per-revolution\n only.", ha="center", va="center", fontsize=8, transform=ax.transAxes)
                 if j == 0:
-                    ax.set_ylabel("Density [g L$^{-1}$]", fontsize=10, labelpad=5)
+                    ax.set_ylabel("Density [g L$^{-1}$]", fontsize=8, labelpad=5)
                 continue
 
             # For surface area features, use million formatter on X-axis
@@ -410,19 +411,22 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
             else:
                 X = sm.add_constant(x)
                 model = sm.OLS(y, X).fit()
-                sns.regplot(x=x, y=y, ax=ax, ci=None, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red'})
+                sns.regplot(
+                    x=x, y=y, ax=ax, ci=None, 
+                    scatter_kws={'s': 5, 'alpha':1.0, 'color':scatter_color}, line_kws={'color':'#000000', 'linewidth':1}
+                )
 
             # Add grid
-            ax.grid(True, linestyle='--', alpha=0.3)
+            # ax.grid(True, linestyle='--', alpha=0.3)
 
             # Only first column gets a ylabel (density)
             if j == 0:
-                ax.set_ylabel("Density [g L$^{-1}$]", fontsize=10, labelpad=5)
+                ax.set_ylabel("Density [g L$^{-1}$]", fontsize=8, labelpad=5)
             else:
                 ax.set_ylabel('')
 
             # Only bottom row gets the x-label (feature name)
-            ax.set_xlabel(feature_name, fontsize=10)
+            ax.set_xlabel(feature_name, fontsize=8)
 
     # Adjust layout
     fig.align_ylabels()
@@ -433,3 +437,90 @@ def plot_all_regressions(df, features, feature_names, output_folder='doc'):
     plt.close()
 
     print(f"[INFO] Finished printing shared regression plot to {output_folder}")
+
+def plot_select_regressions(df, output_folder='doc'):
+    """ Plot regressions for surface area and RGB. """
+    # Select only the features of interest
+    features = ['surface_area_pct', 'mean_R', 'mean_G', 'mean_B']
+    feature_names = ['Surface Area [%]', 'Red [-]', 'Green [-]', 'Blue [-]']
+
+    # Prepare data for per-frame and per-cycle analyses
+    df_per_frame = df.copy()
+    df_per_cycle = df.groupby(['density', 'cycle'], as_index=False)[features].mean()
+
+    # Create figure with shared y-axes
+    fig, axes = plt.subplots(len(features), 4, figsize=(6, 6), sharey=True, sharex='row')
+    if len(features) == 1:
+        axes = axes.reshape(1, -1)  # Ensure 2D array even with 1 feature
+
+    # Define row-specific colors
+    row_colors = {
+        'Surface Area [%]': '#bcbcbc',
+        'Red [-]': '#a72d2b',
+        'Green [-]': '#3b892d',
+        'Blue [-]': '#5381b1'
+    }
+
+    # Column titles
+    col_titles = [
+        'Per-frame | Linear',
+        'Per-frame | Power',
+        'Per-revolution | Linear',
+        'Per-revolution | Power'
+    ]
+
+    # Set column titles
+    for ax, col_title in zip(axes[0], col_titles):
+        ax.set_title(col_title, fontsize=8, pad=5, ha='center')
+
+    # Plot each feature
+    for i, (feature, feature_name) in enumerate(zip(features, feature_names)):
+        for j, (analysis_type, df_analysis, reg_type) in enumerate([
+            ('Per-frame', df_per_frame, 'Linear'),
+            ('Per-frame', df_per_frame, 'Power'),
+            ('Per-revolution', df_per_cycle, 'Linear'),
+            ('Per-revolution', df_per_cycle, 'Power')
+        ]):
+            ax = axes[i, j]
+            y = df_analysis['density']
+            x = df_analysis[feature]
+
+            # Set Y-axis ticks for density (shared across all subplots)
+            ax.set_yticks([1, 2, 3, 4, 5])
+            ax.set_ylim(0, 5.5)
+            ax.tick_params(axis='both', labelsize=8)
+
+            # Plot data
+            scatter_color = row_colors[feature_name]
+            power_curve = 'Pow' in reg_type
+
+            if power_curve:
+                fit_power_law_regression(x, y, ax, scatter_color)
+            else:
+                X = sm.add_constant(x)
+                model = sm.OLS(y, X).fit()
+                sns.regplot(
+                    x=x, y=y, ax=ax, ci=None,
+                    scatter_kws={'s':5, 'alpha':1.0, 'color':scatter_color, 'edgecolor':'none'}, line_kws={'color':'#000000', 'linewidth':1}
+                )
+
+            # Add grid
+            #ax.grid(True, linestyle='--', alpha=0.3)
+
+            # Only first column gets a ylabel (density)
+            if j == 0:
+                ax.set_ylabel("Density [g L$^{-1}$]", fontsize=8, labelpad=5)
+            else:
+                ax.set_ylabel('')
+
+            # Only bottom row gets the x-label (feature name)
+            ax.set_xlabel(feature_name, fontsize=8)
+
+    # Adjust layout
+    fig.align_ylabels()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_folder, 'selected_regressions.png'), dpi=200, bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, 'selected_regressions.eps'), bbox_inches='tight')
+    plt.close()
+
+    print(f"[INFO] Finished printing selected regression plot to {output_folder}")

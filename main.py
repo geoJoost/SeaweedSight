@@ -6,7 +6,7 @@ import os
 from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
 from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam2_outputs, visualize_features, plot_densities
-from src.data_exploration import analyze_data, plot_all_regressions
+from src.data_exploration import analyze_data, plot_all_regressions, plot_select_regressions
 from src.video_clipping import *
 
 def process_video_directory(
@@ -135,6 +135,9 @@ def process_video_directory(
 
     # Combined regressors plot
     plot_all_regressions(combined_df, features, feature_names, output_folder='doc')
+
+    # Regressions but limited to surface area and RGB
+    plot_select_regressions(combined_df, output_folder='doc')
 
     # Regressors into own plots
     analyze_data(

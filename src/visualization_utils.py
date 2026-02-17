@@ -196,7 +196,7 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
 
     # Create subplot: 9 columns (one per density), 6 columns (three sets of Image, Confidence, Masks)
     nrows = len(target_densities)
-    fig, axes = plt.subplots(nrows, 9, figsize=(8.27, 11.69))  # Portrait A4 = (8.27, 11.69)
+    fig, axes = plt.subplots(nrows, 9, figsize=(2.95, 4))  # Portrait A4 = (8.27, 11.69)
 
     if nrows == 1:
         axes = axes[None, :]  # Ensure axes is 2D even for a single row
