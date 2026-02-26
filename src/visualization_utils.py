@@ -192,11 +192,11 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
 
     # Keep only three cycles per density
     for density in selected_cycles:
-        selected_cycles[density] = selected_cycles[density][:3]
+        selected_cycles[density] = selected_cycles[density][:1]
 
     # Create subplot: 9 columns (one per density), 6 columns (three sets of Image, Confidence, Masks)
     nrows = len(target_densities)
-    fig, axes = plt.subplots(nrows, 9, figsize=(2.95, 4))  # Portrait A4 = (8.27, 11.69)
+    fig, axes = plt.subplots(nrows, 3, figsize=(3.5, 2.85))  # Portrait A4 = (8.27, 11.69)
 
     if nrows == 1:
         axes = axes[None, :]  # Ensure axes is 2D even for a single row
@@ -205,12 +205,12 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
     binary_cmap = ListedColormap(['#FCF3EE', '#68000D'])
 
     # Set top-row titles
-    for col, title in enumerate(['Img.', 'Conf.', 'Masks'] * 3):
-        axes[0, col].set_title(title, fontsize=10)
+    for col, title in enumerate(['Image', 'Confidence', 'Mask'] * 1):
+        axes[0, col].set_title(title, fontsize=9)
 
     for i, density in enumerate(target_densities):
         cycle_names = selected_cycles.get(density, [])
-        for j, cycle_name in enumerate(cycle_names[:3]):  # Use three cycles per density
+        for j, cycle_name in enumerate(cycle_names[:1]):
             frames = cycle_frames_dict[cycle_name]
             if not frames:
                 continue
@@ -225,37 +225,43 @@ def plot_densities(cycle_frames_dict, model_name, conf_threshold=0.5, num_prompt
                 [frame], model_name, max_frames=1,
                 num_prompts=num_prompts, luminance_percentile=luminance_percentile
             )
-            probs = probs[0]
+            probs = probs[0].to(torch.float32)
             points = outputs[0]['points']
             masks = outputs[0]['masks']
 
+            # To better use the space, we rotate everything by 90 degrees
+            rotated_frame = np.rot90(frame, k=1)
+            rotated_probs = np.rot90(probs.squeeze().cpu().numpy())
+            rotated_mask = np.rot90(masks.squeeze().cpu().numpy(), k=1)
+            rotated_points = [[(point[1], frame.shape[1] - point[0]) for point in obj_points] for obj_points in outputs[0]['points']]
+
             # Plot seaweed frame with points
-            axes[i, 3*j].imshow(frame)
-            for obj_points in points:
+            axes[i, 3*j].imshow(rotated_frame)
+            for obj_points in rotated_points:
                 for point in obj_points:
                     axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='green', fill=True))
                     axes[i, 3*j].add_patch(Circle((point[0], point[1]), 20, color='white', fill=False, lw=1))
             if j == 0:
-                axes[i, 0].set_ylabel(f'{density} g L$^{-1}$', fontsize=10)#, labelpad=5)
+                axes[i, 0].set_ylabel(f'{density} g L$^{{-1}}$', fontsize=9)
             axes[i, 3*j].set_xticks([])
             axes[i, 3*j].set_yticks([])
 
             # Plot probabilities
-            axes[i, 3*j + 1].imshow(probs.cpu().squeeze().to(torch.float32), cmap='viridis', vmin=0, vmax=1.0)
+            axes[i, 3*j + 1].imshow(rotated_probs, cmap='viridis', vmin=0, vmax=1.0)
             axes[i, 3*j + 1].set_xticks([])
             axes[i, 3*j + 1].set_yticks([])
 
             # Plot mask output
-            binarized_mask = (probs > conf_threshold).to(torch.uint8) * 255
-            axes[i, 3*j + 2].imshow(binarized_mask.cpu().squeeze().numpy(), cmap=binary_cmap)
+            #binarized_mask = (probs > conf_threshold).to(torch.uint8) * 255
+            axes[i, 3*j + 2].imshow(rotated_mask, cmap=binary_cmap)
             axes[i, 3*j + 2].set_xticks([])
             axes[i, 3*j + 2].set_yticks([])
 
     # Adjust layout
     plt.tight_layout()
     output_path = os.path.join(output_folder, "model_output.eps")
-    plt.savefig(output_path, format='eps')
-    plt.savefig(os.path.join(output_folder, 'model_output.png'), dpi=600)
+    plt.savefig(output_path, format='eps', bbox_inches='tight')
+    plt.savefig(os.path.join(output_folder, 'model_output.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
     print(f"[INFO] Saved shared subplot visualization to: {output_path}")
