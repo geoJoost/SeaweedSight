@@ -1,45 +1,87 @@
 import numpy as np
 import pandas as pd
 import os
+from typing import Dict, List, Optional, Tuple, Any
 
 # Custom imports
-from src.sam_prompter import prompt_sam2, segment_frames_sam2, segment_frames_sam1
-from src.data_utils import get_frame_paths, extract_density_from_dir, calculate_surface_area, extract_color_features
-from src.visualization_utils import visualize_sam2_outputs, visualize_features, plot_densities
-from src.data_exploration import analyze_data, plot_all_regressions, plot_select_regressions
+from src.sam_prompter import segment_frames_sam1, segment_frames_sam2
+from src.data_utils import extract_density_from_path, calculate_surface_area, extract_color_features
+from src.visualization_utils import visualize_sam_segmentation, plot_density_examples, plot_all_predictors, plot_select_predictors
+from src.statistics import analyze_feature_relationships
 from src.video_clipping import *
 
-def process_video_directory(
-    # data_dirs,
-    cycle_frames_dict,
-    model_name="facebook/sam2-hiera-base-plus",
-    conf_threshold=0.5,
-    num_prompts=5,
-    luminance_percentile=10,
-    output_folder="data/processed",
-    max_frames=None,
-    save_files=False
-):
+def ulva_analysis_pipeline(
+    # Pre-processing
+    video_configs: Dict[str, List[Tuple[int, int]]],
+    frame_interval_seconds: float = 5.0,
+    
+    # Segmentation
+    model_name: str = "facebook/sam-vit-huge",
+    conf_threshold: float = 0.5,
+
+    # Prompt generation
+    num_prompts: int = 5,
+    luminance_percentile: int = 10,
+    
+    # Plotting
+    output_folder: str = "data/processed",
+    save_files: bool = False
+) -> pd.DataFrame:
     """
-    Process video frames from multiple directories, extract features, and visualize results.
+    End-to-end pipeline for Ulva spp. video analysis:
+    1. Finds the smallest ROI across al videos for clipping.
+    2. Extracts relevant frames from videos.
+    3. Semantic segmentation using SAM and extract features (RGB, CIELAB, surface area).
+    5. Analyzes results by fitting linear and power regressions.
+    6. Plots example frames at different biomass densities.
 
     Args:
-        data_dirs (list): List of directories containing video frames.
-        model_name (str): Name of the SAM2 model to use.
-        conf_threshold (float): Confidence threshold for segmentation.
-        output_folder (str): Directory to save outputs (CSV, plots, etc.).
-        max_frames (int): Maximum number of frames to process per directory (optional).
+        video_configs: Dictionary mapping video paths to frame ranges to keep.
+        sam_model: SAM model name (e.g., 'facebook/sam-vit-huge').
+        frame_interval_seconds: Interval for frame extraction (default: 5.0s -> 0.2fps).
+        confidence_threshold: Confidence threshold for segmentation.
+        num_prompts: Number of SAM point prompts per frame.
+        luminance_percentile: Percentile for luminance thresholding.
+        output_dir: Base directory for all outputs.
+        save_files: If True, saves extracted frames to disk.
     """
     # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
     output_csv = os.path.join(output_folder, "ulva_processed_data.csv") # Create output .csv
 
+    # Find ROI
+    print("[INFO] Step 1/4: Determining ROI and extracting frames...")
+    roi_width, roi_height = find_smallest_roi(video_configs)
+
+    # Split biomass video into multiple cycles/revolutions, corresponding to when duck passed underneath the camera
+    # And take relevant frames to prevent segmenting same object multiple times
+    all_extracted_frames = {}
+    for video_path, frame_ranges in video_configs.items():
+        print(f"[INFO] Processing {video_path} with frame keep ranges: {frame_ranges}")
+
+        # Process .avi
+        extracted_frames = extract_relevant_frames(
+            # .avi or .mp4 file
+            video_path,
+
+            # Frame specificatrions
+            frame_interval_seconds=frame_interval_seconds, # 0.2 fps
+            frame_ranges=frame_ranges, 
+            roi=(roi_width, roi_height),
+
+            # Save frames
+            save_frames=save_files
+        )
+        all_extracted_frames.update(extracted_frames)
+
+    # Analyze footage
+    print("\n[INFO] Step 2/4: Segmenting frames and extracting features...")
     if not os.path.exists(output_csv):
         # Initialize a list to hold all DataFrames
-        all_dfs = []
+        cycle_dataframes = []
 
         # Process each directory
-        for cycle_name, frames in cycle_frames_dict.items():
+        for cycle_name, frames in all_extracted_frames.items():
             print(f"{'-' * 50}")
             print(f"[INFO] Processing cycle: {cycle_name} using SAM")
 
@@ -48,39 +90,35 @@ def process_video_directory(
             total_pixels = w * h
 
             # Initialize DataFrame for this directory
-            df = pd.DataFrame()
-            df['frame_id'] = list(range(len(frames)))
-            df[['model_name', 'conf_threshold', 'num_prompts', 'luminance_percentile']] = model_name, conf_threshold, num_prompts, luminance_percentile
-            df['density'] = extract_density_from_dir(cycle_name)
-            df['cycle'] = cycle_name[-1] # Takes number from names like 'Ulva_05_1_cycle2'
-
-            # Prompt SAM2 for video processing
-            # video_frames, probs_stack, all_outputs = prompt_sam2(data_dir, model_name, max_frames, num_prompts=5, luminance_percentile=10)
-
-            # Prompt SAM2 for semantic segmentation per-frame
-            # video_frames, probs_stack, all_outputs = segment_frames_sam2(frames, model_name, max_frames, num_prompts=5, luminance_percentile=10)
+            cycle_df = pd.DataFrame()
+            cycle_df['frame_id'] = list(range(len(frames)))
+            cycle_df['model_name'] = model_name
+            cycle_df['conf_threshold'] = conf_threshold
+            cycle_df['num_prompts'] = num_prompts
+            cycle_df['luminance_percentile'] = luminance_percentile
+            cycle_df['density'] = extract_density_from_path(cycle_name)
+            cycle_df['cycle'] = cycle_name[-1] # Takes number from names like 'Ulva_05_1_cycle2'
 
             # Prompt SAM1 for semantic segmentation per-frame
-            video_frames, probs_stack, all_outputs = segment_frames_sam1(frames, 
-                                                                        model_name, 
-                                                                        max_frames, 
-                                                                        num_prompts=num_prompts, 
-                                                                        luminance_percentile=luminance_percentile)
+            video_frames, probs_stack, sam_outputs = segment_frames_sam1(
+                frames, 
+                model_name, 
+                num_prompts=num_prompts, 
+                luminance_percentile=luminance_percentile
+            )
+
+            # UNUSED #
+            # Prompt SAM2 for semantic segmentation per-frame
+            # video_frames, probs_stack, sam_outputs = segment_frames_sam2(frames, model_name, num_prompts=5, luminance_percentile=10)
 
             # Pre-allocate lists for all features
             feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
             feature_data = {key: [] for key in feature_keys}
 
             # Propagate over the frames
-            for frame_idx, probs in enumerate(probs_stack):
-                # Unpack prompts for this frame
-                current_points = all_outputs[frame_idx]['points']
-                current_labels = all_outputs[frame_idx]['labels']
-                current_logits = all_outputs[frame_idx]['logits']
-                current_masks = all_outputs[frame_idx]['masks'] # Second idx corresponds to the objectID. No tracking in current implementation
-
+            for frame_idx, frame_probs in enumerate(probs_stack):
                 # Calculate surface area (in px)
-                surface_area, binarized_mask = calculate_surface_area(probs.squeeze(), conf_threshold)
+                surface_area, binarized_mask = calculate_surface_area(frame_probs.squeeze(), conf_threshold)
 
                 # Extract color features for the current frame
                 color_features = extract_color_features(video_frames[frame_idx], binarized_mask)
@@ -92,12 +130,19 @@ def process_video_directory(
 
                 # Save visualization for each frame
                 if save_files:
-                    visualize_sam2_outputs(
+                    # Unpack prompts for this frame
+                    frame_points = sam_outputs[frame_idx]['points']
+                    # current_labels = sam_outputs[frame_idx]['labels'] # Not used
+                    # current_logits = sam_outputs[frame_idx]['logits'] # Not used
+                    frame_masks = sam_outputs[frame_idx]['masks']
+
+                    # Visualize frame
+                    visualize_sam_segmentation(
                         cycle_name,
                         video_frames,
-                        current_points,
-                        probs,
-                        current_masks,
+                        frame_points,
+                        frame_probs,
+                        frame_masks,
                         frame_idx=frame_idx,
                         data_dir=cycle_name,
                         output_folder=output_folder,
@@ -106,102 +151,87 @@ def process_video_directory(
 
             # Assign all data to the DataFrame at once
             for key in feature_keys:
-                df[key] = feature_data[key]
+                cycle_df[key] = feature_data[key]
 
             # Calculate cumulative surface area
-            df['cumulative_surface_area'] = np.cumsum(df['surface_area'])
+            cycle_df['tot_surface_area'] = cycle_df['surface_area'].sum()
 
             # Calculate surface area percentage
-            df['surface_area_pct'] = (df['surface_area'] / total_pixels) * 100
+            cycle_df['surface_area_pct'] = (cycle_df['surface_area'] / total_pixels) * 100
 
             # Append to the list of DataFrames
-            all_dfs.append(df)
-
-            # Create visualization of features over entire timeseries
-            visualize_features(df, conf_threshold, cycle_name, output_dir=output_folder)
+            cycle_dataframes.append(cycle_df)
             print(f"[INFO] Finished processing {cycle_name}")
 
         # Concatenate all cycle DataFrames into one
-        combined_df = pd.concat(all_dfs, ignore_index=True)
+        processed_data = pd.concat(cycle_dataframes, ignore_index=True)
 
         # Save a single combined CSV
-        combined_df.to_csv(output_csv, index=False)
+        processed_data.to_csv(output_csv, index=False)
         print(f"[INFO] Saved processed data to: {output_csv}")
 
-    # Compute correlation
-    combined_df = pd.read_csv(output_csv)
-    features = ['surface_area_pct', 'cumulative_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
+    # Compute regression and statistics
+    print("\n[INFO] Step 3/4: Fitting and plotting regressions...")
+    analysis_df = pd.read_csv(output_csv)
+    features = ['surface_area_pct', 'tot_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
     feature_names = ['Surface area [%]', 'Tot. surface area [px]', 'Red', 'Green', 'Blue', 'Luminance', 'a*', 'b*']
 
     # Combined regressors plot
-    plot_all_regressions(combined_df, features, feature_names, output_folder='doc')
+    plot_all_predictors(analysis_df, features, feature_names, output_folder='doc/output')
 
     # Regressions but limited to surface area and RGB
-    plot_select_regressions(combined_df, output_folder='doc')
+    plot_select_predictors(analysis_df, output_folder='doc')
 
     # Regressors into own plots
-    analyze_data(
-        df=combined_df,
-        features=features,
-        output_folder=output_folder
+    analyze_feature_relationships(
+        analysis_df=analysis_df,
+        feature_columns=features,
+        output_folder='doc/output'
     )
 
-    print('[INFO] Code finished...')
+    print("\n[INFO] Step 4/4: Plotting frame examples...")
+    #  Plot random frames at different biomass densities (0.5, 2.0, 4.0 and 5.0 g/L)
+    plot_density_examples(
+        all_extracted_frames,
+        model_name='facebook/sam-vit-huge',
+        conf_threshold=0.5,
+        num_prompts=5,
+        luminance_percentile=10,
+        output_folder="doc/output"
+    )
+    print("\n[INFO] Pipeline completed successfully!")
+    return analysis_df
 
-## Video to frames preperation ##
+# Input videos
+# Later argument are the relevant frame ranges to keep
 video_configs = {
-    r"data/Ducks/Ulva_05_1_C.mp4": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
-    r"data/Ducks/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)],
-    r"data/Ducks/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
-    r"data/Ducks/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    r"data/Ducks/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    r"data/Ducks/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    r"data/Ducks/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    r"data/Ducks/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    r"data/Ducks/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
-    r"data/Ducks/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
+    r"data/raw/Ulva_05_1_C.mp4": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
+    r"data/raw/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)],
+    r"data/raw/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/raw/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/raw/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    r"data/raw/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    r"data/raw/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    r"data/raw/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    r"data/raw/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/raw/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
     }
 
-# Find the smallest ROI
-roi_width, roi_height = find_smallest_roi(video_configs)
+ulva_analysis_pipeline(
+    # Pre-processing
+    video_configs = video_configs,
+    frame_interval_seconds = 5, # Take a frame every 5 seconds
+    
+    # Segmentation
+    # model_name="facebook/sam2.1-hiera-large", # SAM2
+    model_name = "facebook/sam-vit-huge", # SAM1
+    conf_threshold = 0.5,
 
-# Split video into individual cycles (i.e., collection of individual frames grouped per round of floating device)
-all_cycle_frames = {}
-for input_video, keep_ranges in video_configs.items():
-    print(f"[INFO] Processing {input_video} with keep ranges: {keep_ranges}")
-
-    # Process .avi
-    cycle_frames = process_video_n_seconds(input_video, # .avi file
-                           # Frame specificatrions
-                           seconds_interval=5.0,
-                           keep_ranges=keep_ranges, 
-                           roi=(roi_width, roi_height),
-
-                           # Save frames
-                           save_files=True
-                           )
-    all_cycle_frames.update(cycle_frames)
-
-## Semantic segmentation ##
-# Binary segmentation of all frames
-process_video_directory(
-    cycle_frames_dict=all_cycle_frames,
-    # model_name="facebook/sam2.1-hiera-large", # SAM2 ONLY
-    model_name='facebook/sam-vit-huge', # SAM1 ONLY
-    conf_threshold=0.5,
-    num_prompts=5,
-    luminance_percentile=10, # Increase to >5% when using normalization
-    output_folder="data/processed",
-    max_frames=None,
-    save_files=True
-)
-
-# Function to plot randomly selected frame at different densities (0.5, 1.0, 2.0, 3.0, 4.0, and 5.0 g/L)
-plot_densities(
-    all_cycle_frames,
-    model_name='facebook/sam-vit-huge',
-    conf_threshold=0.5,
-    num_prompts=5,
-    luminance_percentile=10,
-    output_folder="doc"
+    # Point prompt generation
+    num_prompts = 5,
+    luminance_percentile  = 10,
+    
+    # Plotting
+    output_folder = "data/processed",
+    save_files = True
 )
