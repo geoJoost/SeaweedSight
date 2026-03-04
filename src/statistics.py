@@ -3,17 +3,13 @@ import numpy as np
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
 import seaborn as sns
-from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit
 from scipy.stats import t
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.eval_measures import rmse
-from typing import List, Tuple, Dict
+from typing import List, Tuple
 
 def power_law_curve(x, a, b):
     """Power-law curve: y = a * x^b"""

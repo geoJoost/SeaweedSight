@@ -1,18 +1,22 @@
 # SeaweedSight: Estimating biomass density in land-based cultivation of Ulva spp. using a low cost RGB imaging system
 [[`paper`](google.com)]
-[[`dataset`](https://drive.google.com/drive/folders/1UBy1mnVWgmaF_1nKgGyrYtS_L52mACIy?usp=sharing)]
+[[`dataset`](https://doi.org/10.5281/zenodo.18849922)]
 
 
-> The code associated with [['paper]](google.com) where we developed a low-cost RGB imaging system for *Ulva spp*. biomass estimation in land-based raceways. Using segmentation and power regression models, we achieve accurate biomass density predictions to potentially reduce labor costs and achieve more routine monitoring. 
+> The code associated with our [paper](https://google.com) where we demonstrate a method for reliable estimation of *Ulva spp.* biomass in land-based raceways using a low-cost RGB camera. By combining segmentation and regression models, we achieve accurate biomass density predictions (R^2 = 0.98, RMSE = 0.23 g/L), offering a cost-effective solution to reduce labor costs and enable routine, automated monitoring. 
 
-<img src="./doc/Ulva_05_1_cycle3_example.gif" width="1000">
+<img src="./doc/Ulva_05_1_cycle3_example.gif" height="500">
 
-From the example above of *Ulva spp*. footage recorded at a biomass density of 0.5 g/L and processed using the [Segment Anything Model](segmentanything.com). While model mispredictions can be seen, these are smoothed and removed through aggregating frame-level data into per-revolution levels, leading to more robust predictors and estimates.
+While occasional model predictions may occur at the frame level, these errors are effectively smoothed and mitigated by aggregating data at the per-revolution level (i.e., footage recorded over approximately three minutes), resulting in robust biomass estimates.
 
 ## Monitoring setup
-An IDS UI-5290-FA-C-HQ camera with a 7 mm lens was mounted approximately 80 centimeters above the raceway (see Figure), with a field of view of 75 cm so that the full width of the raceway was in view of the camera. For more details, please see the manuscript.
+An IDS UI-5290-FA-C-HQ camera with a 7 mm lens was mounted approximately 80 centimeters above the raceway (see Figure), with a field of view of 75 cm so that the full width of the raceway was in view of the camera. For camera settings, see the dataset at [Zenodo](https://doi.org/10.5281/zenodo.18849922). For details on the monitoring setup, see the manuscript.
 
-<img src="./doc/camera_setup.jpg" width="1000">
+
+Camera setup | Adding *Ulva spp.* | Flotation device (i.e., rubber duck)
+:-------------------------:|:-------------------------: |:-------------------------:
+<img src="./doc/camera_setup.jpg" height="500" />  | <img src="./doc/adding_ulva.jpg" height="500"> |  <img src="./doc/ducks.jpeg" height="500" /> 
+
 
 ## Setup
 
@@ -37,7 +41,7 @@ conda install -c conda-forge numpy pandas scikit-learn scikit-image opencv matpl
 ```
 ## Getting started
 To reproduce the results in the manuscript:
-1. Download the dataset from [Zenodo](google.com) and place it in `/data/` folder at the root of this project.
+1. Download the dataset from [Zenodo](https://doi.org/10.5281/zenodo.18849922) and place it in `/data/` folder at the root of this project.
 2. Run the script: `main.py` with default parameters
 
 Testing on your own dataset:
@@ -52,4 +56,4 @@ To test on your own dataset:
 ---
 If you use this code or dataset, please cite our [paper](google.com). For questions, feedback, or collaborations, feel free to [contact us](mailto:joost.vandalen@wur.nl).
 
-<img src="./doc/Ulva_05_1_cycle3_example.gif" width="1000">
+

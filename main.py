@@ -202,19 +202,20 @@ def ulva_analysis_pipeline(
     print("\n[INFO] Pipeline completed successfully!")
     return analysis_df
 
-# Input videos
-# Later argument are the relevant frame ranges to keep
+# Input videos paths
+# Second argument are relevant frame ranges to keep for each trial
+# This splits the recording of one biomass density level, into triplicate measurements
 video_configs = {
-    r"data/raw/Ulva_05_1_C.mp4": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 G/L
-    r"data/raw/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)],
-    r"data/raw/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
-    r"data/raw/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
-    r"data/raw/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
-    r"data/raw/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
-    r"data/raw/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
-    r"data/raw/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
-    r"data/raw/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
-    r"data/raw/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 G/L
+    r"data/footage/Ulva_05_1_C.mp4": [(208, 3978), (4089, 9233), (9490, 13285)], # 0.5 g/L
+    r"data/footage/Ulva_10_1_C.mp4": [(379, 4652), (4804, 8566), (8760, 12755)], # 1.0 g/L
+    r"data/footage/Ulva_15_1_C.mp4": [(119, 2670), (2850, 5143), (5480, 7741)],
+    r"data/footage/Ulva_20_3.avi": [(115, 2850), (2906, 5981), (6023, 8672)],
+    r"data/footage/Ulva_25_3.avi": [(205, 2312), (2342, 4682), (4724, 6936)],
+    r"data/footage/Ulva_30_1.avi": [(120, 2777), (2816, 4931), (4967, 7585)],
+    r"data/footage/Ulva_35_1.avi": [(108, 2546), (2587, 4952), (4994, 7295)],
+    r"data/footage/Ulva_40_1.avi": [(357, 2769), (2826, 5357), (5390, 7672)],
+    r"data/footage/Ulva_45_1.avi": [(114, 2508), (2542, 5027), (5056, 7710)],
+    r"data/footage/Ulva_50_1.avi": [(358, 2929), (3016, 5350), (5400, 7976)], # 5.0 g/L
     }
 
 ulva_analysis_pipeline(

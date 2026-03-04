@@ -1,18 +1,11 @@
-import os
 import numpy as np
 import torch
-from PIL import Image
 import cv2
 import re
-import os
-import torch
-import cv2
-import numpy as np
 from scipy.spatial.distance import cdist
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Union
 
 # Custom imports
-from src.visualization_utils import visualize_luminance_prompts
 
 def create_luminance_prompts(
         frame: np.ndarray, 

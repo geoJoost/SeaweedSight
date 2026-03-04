@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import os
 import random
-import re
 import torch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
