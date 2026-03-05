@@ -44,13 +44,9 @@ To reproduce the results in the manuscript:
 1. Download the dataset from [Zenodo](https://doi.org/10.5281/zenodo.18849922) and place it in `/data/` folder at the root of this project.
 2. Run the script: `main.py` with default parameters
 
-Testing on your own dataset:
-1. Organize your dataset in the same structures as the 
-* Run `main.py` without modifications
-
 To test on your own dataset:
 1. Record footage of your cultivation system in similar circumstances to the GIF above.
-2. Store the .mp4 or .avi in `/data/inference/`
+2. Store the .mp4 or .avi in `/data/inference/`.
 3. Run the script `inference.py` **NOT IMPLEMENTED YET**
 
 ---
