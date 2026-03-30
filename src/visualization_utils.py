@@ -13,7 +13,6 @@ import statsmodels.api as sm
 from typing import List, Tuple, Dict
 
 # Custom imports
-from src.statistics import fit_power_law_regression
 
 def visualize_luminance_prompts(
         frame, 

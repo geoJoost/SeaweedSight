@@ -16,7 +16,7 @@ def create_regression_plot(
         regression_type=''
     ):
     """
-    Compute and plot linear or power curve regression for each feature vs. density.
+    Compute linear and log-linear OLS regression for each feature vs. density.
     Prints regression summaries and saves plots.
     """
     print(f"{'-' * 50}")
@@ -76,7 +76,7 @@ def create_regression_plot(
             
         # Print results
         print(f"\n[INFO] {model_type} regression for {feature}:")
-        print(f"[INFO] R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
+        print(f"[INFO] n = {len(x)} | R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
 
         # Print regression summary
         print(f"\n[INFO] \n{model.summary(alpha=0.05)}")
@@ -197,8 +197,8 @@ def analyze_feature_relationships(
         # (data, name, color, regression_type)
         (processed_data, "per_frame_linear", '#219ebc', ''),
         (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_linear", '#606c38', ''),
-        (processed_data, "per_frame_power", '#fb8500', 'log'),
-        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_power", '#8b5cf6', 'log')
+        (processed_data, "per_frame_loglinear", '#fb8500', 'log'),
+        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_loglinear", '#8b5cf6', 'log')
     ]
 
     # Run all analyses
@@ -212,6 +212,6 @@ def analyze_feature_relationships(
             create_colinearity_plot(data_subset, feature_columns, name, output_folder)
 
         # Regression plot
-        create_regression_plot(data_subset, feature_columns, name, output_folder, color, regression)
+        create_regression_plot(data_subset, feature_columns, regression)
 
     print(f"\n[INFO] Analysis complete. Results saved to: {output_folder}")
