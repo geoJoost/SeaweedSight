@@ -4,73 +4,15 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.optimize import curve_fit
-from scipy.stats import t
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.eval_measures import rmse
 from typing import List, Tuple
 
-def power_law_curve(x, a, b):
-    """Power-law curve: y = a * x^b"""
-    return a * np.power(x, b)
-
-def fit_power_law_regression(
-        x_values: np.ndarray,
-        y_values: np.ndarray, 
-        ax: plt.Axes, 
-        scatter_color: str
-    ) -> Tuple[float, float, float]:
-    """Fit and plot a power-law regression (y = a * x^b), returning R2 and p-values."""
-    try:
-        x_values = np.clip(x_values, a_min=1e-10, a_max=None)
-        popt, pcov = curve_fit(power_law_curve, x_values, y_values, maxfev=10000)
-        a, b = popt
-
-        # Plot scatter points
-        sns.scatterplot(x=x_values, y=y_values, ax=ax, alpha=1.0, color=scatter_color, linewidth=0, s=5)
-
-        # Plot fitted power curve
-        x_fit = np.linspace(x_values.min(), x_values.max(), 100)
-        y_fit = power_law_curve(x_fit, *popt)
-        ax.plot(x_fit, y_fit, color='#000000', lw=1, label=f'Power curve: y = {a:.2f} ln(x) + {b:.2f}')
-
-        # Calculate R²
-        residuals = y_values - power_law_curve(x_values, *popt)
-        ss_res = np.sum(residuals**2)
-        ss_tot = np.sum((y_values - np.mean(y_values))**2)
-        r_squared = 1 - (ss_res / ss_tot)
-
-        # Calculate RMSE
-        rmse_val = np.sqrt(np.mean(residuals**2))
-
-        # Calculate degrees of freedom
-        n = len(x_values)
-        p = len(popt)
-        dof = max(0, n-p)
-
-        # Calculate residual standard deviation
-        residual_std = np.sqrt(ss_res / dof)
-        cov_matrix = pcov * residual_std**2
-        std_errors = np.sqrt(np.diag(cov_matrix))
-
-        # t-values and p-values
-        t_values = popt / std_errors
-        p_values = 2 * (1 - t.cdf(np.abs(t_values), df=dof))
-
-        return r_squared, p_values[1], rmse_val
-
-    except RuntimeError:
-        print(f"\n\n[ERROR] Power curve fit failed")
-        sns.regplot(x=x_values, y=y_values, ax=ax, scatter_kws={'alpha':0.5, 'color':scatter_color}, line_kws={'color':'red', 'linewidth':1})
-        return None, None, None
-
 def create_regression_plot(
         df: pd.DataFrame, 
         feature_columns: List[str], 
         output_name: str, 
-        output_folder: str ='doc', 
-        scatter_color: str ='#219ebc',
         regression_type=''
     ):
     """
@@ -80,26 +22,40 @@ def create_regression_plot(
     print(f"{'-' * 50}")
     print(f'[INFO] {'#' * 20} Regression results {output_name} {'#' * 20}')
 
-    # Create subplots
-    n_rows = (len(feature_columns) + 1) // 2  # Arrange in 2 columns
-    fig, axes = plt.subplots(n_rows, 2, figsize=(12, 4 * n_rows))
-    axes = axes.flatten()  # Flatten for easy iteration
-
     # Plot each feature and compute regression
     for i, feature in enumerate(feature_columns):
-        ax = axes[i]
         x = df[feature]
         y = df['density']
         
-        if regression_type == 'pow':
-            # Fit power-law curve
-            r_squared, p_value, rmse_val = fit_power_law_regression(x, y, ax, scatter_color)
+        # Since data is exponential, log(y) to fit OLS
+        if regression_type == 'log':
+            model_type = "Log-linear"
 
-            print(f"\n[INFO] Power regression for {feature}:")
-            print(f"R² = {r_squared:.2f}%, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$")
-            ax.set_title(f'{feature} (R² = {r_squared:.2f}, p = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$)', fontsize=10)
+            # Log-transform
+            log_x = np.log(x)
+            log_y = np.log(y)
 
+            # Fit OLS
+            X = sm.add_constant(x)
+            model = sm.OLS(log_y, X).fit()
+
+            # Extract R2 and p-value
+            r_squared = model.rsquared
+            p_value = model.f_pvalue
+
+            # Since we cannot directly back-transform the outputs due to bias
+            # We use Duan's Smearing Retransformation, see: https://en.wikipedia.org/wiki/Smearing_retransformation
+            # To transform RMSE in g/L
+            # NOTE: These cannot directly be compared to naive RMSE with bias-corrected log-linear RMSE
+            y_pred_log = model.predict(X)
+            sigma = np.std(model.resid, ddof=int(model.df_model+1))
+            y_pred = np.exp(y_pred_log + 0.5 * sigma**2)  # bias-corrected
+            rmse_val = rmse(y, y_pred)
+
+        # Normal OLS with unchanged values
         else:
+            model_type = "Linear"
+
             # Fit linear regression
             X = sm.add_constant(x)
             model = sm.OLS(y, X).fit()
@@ -112,36 +68,18 @@ def create_regression_plot(
             y_pred = model.predict(X)
             rmse_val = rmse(y, y_pred)
 
-            # Format p-value for reporting
-            if p_value < 0.001:
-                p_value_str = "<.001"
-            else:
-                p_value_str = f"{p_value:.3f}"
+        # Format p-value for reporting
+        if p_value < 0.001:
+            p_value_str = "<.001"
+        else:
+            p_value_str = f"{p_value:.3f}"
             
-            # Print results
-            print(f"\n[INFO] Linear regression for {feature}:")
-            print(f"R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g L$^{-1}$")
+        # Print results
+        print(f"\n[INFO] {model_type} regression for {feature}:")
+        print(f"[INFO] R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
 
-            # Print regression summary
-            print(f"\n\n[INFO] \n{model.summary(alpha=0.05)}")
-
-            # Scatter plot with regression line
-            sns.regplot(x=x, y=y, ax=ax, scatter_kws={'alpha':0.5, 'color': scatter_color}, line_kws={'color':'red'})
-
-            # Add R² as text
-            ax.set_title(f'{feature} (R² = {model.rsquared:.2f}, p-value = {p_value:.3f}, RMSE = {rmse_val:.2f} g L$^{-1}$)', fontsize=10)
-
-        ax.set_ylabel('Density [g L$^{-1}$]')
-        ax.set_xlabel(feature)
-        ax.legend()
-
-    # Hide unused subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].axis('off')
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_folder, f'model_regression_{output_name}.png'), dpi=200)
-    plt.close()
+        # Print regression summary
+        print(f"\n[INFO] \n{model.summary(alpha=0.05)}")
 
 def create_correlation_plot(
         df: pd.DataFrame, 
@@ -254,12 +192,13 @@ def analyze_feature_relationships(
     correlations = processed_data[['density'] + feature_columns].corr()['density'][1:]
 
     # Analysis configurations
+    # Fit either standard OLS or log-linear model
     analyses = [
         # (data, name, color, regression_type)
         (processed_data, "per_frame_linear", '#219ebc', ''),
         (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_linear", '#606c38', ''),
-        (processed_data, "per_frame_power", '#fb8500', 'pow'),
-        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_power", '#8b5cf6', 'pow')
+        (processed_data, "per_frame_power", '#fb8500', 'log'),
+        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_power", '#8b5cf6', 'log')
     ]
 
     # Run all analyses

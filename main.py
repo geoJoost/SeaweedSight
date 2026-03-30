@@ -1,10 +1,9 @@
-import numpy as np
 import pandas as pd
 import os
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Tuple
 
 # Custom imports
-from src.sam_prompter import segment_frames_sam1, segment_frames_sam2
+from src.sam_prompter import segment_frames_sam1
 from src.data_utils import extract_density_from_path, calculate_surface_area, extract_color_features
 from src.visualization_utils import visualize_sam_segmentation, plot_density_examples, plot_all_predictors, plot_select_predictors
 from src.statistics import analyze_feature_relationships
@@ -107,10 +106,6 @@ def ulva_analysis_pipeline(
                 luminance_percentile=luminance_percentile
             )
 
-            # UNUSED #
-            # Prompt SAM2 for semantic segmentation per-frame
-            # video_frames, probs_stack, sam_outputs = segment_frames_sam2(frames, model_name, num_prompts=5, luminance_percentile=10)
-
             # Pre-allocate lists for all features
             feature_keys = ['surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
             feature_data = {key: [] for key in feature_keys}
@@ -174,7 +169,7 @@ def ulva_analysis_pipeline(
     print("\n[INFO] Step 3/4: Fitting and plotting regressions...")
     analysis_df = pd.read_csv(output_csv)
     features = ['surface_area_pct', 'tot_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
-    feature_names = ['Surface area [%]', 'Tot. surface area [px]', 'Red', 'Green', 'Blue', 'Luminance', 'a*', 'b*']
+    feature_names = ['Surface area [%]', 'Tot. surface area [px]', 'Red [-]', 'Green [-]', 'Blue [-]', 'Luminance [-]', 'a* [-]', 'b* [-]']
 
     # Combined regressors plot
     plot_all_predictors(analysis_df, features, feature_names, output_folder='doc/output')
@@ -224,7 +219,6 @@ ulva_analysis_pipeline(
     frame_interval_seconds = 5, # Take a frame every 5 seconds
     
     # Segmentation
-    # model_name="facebook/sam2.1-hiera-large", # SAM2
     model_name = "facebook/sam-vit-huge", # SAM1
     conf_threshold = 0.5,
 
