@@ -3,11 +3,13 @@
 [[`dataset`](https://doi.org/10.5281/zenodo.18849922)]
 
 
-> The code associated with our [paper](https://google.com) where we demonstrate a method for reliable estimation of *Ulva spp.* biomass in land-based raceways using a low-cost RGB camera. By combining segmentation and regression models, we achieve accurate biomass density predictions (R^2 = 0.98, RMSE = 0.23 g/L), offering a cost-effective solution to reduce labor costs and enable routine, automated monitoring. 
+> The code associated with our [paper](https://google.com) where we demonstrate a method for reliable estimation of *Ulva spp.* biomass in land-based raceways using a low-cost RGB camera. By combining segmentation and regression models, we achieve accurate biomass density predictions (R² = 0.99, RMSE = 0.18 g/L), offering a cost-effective solution to reduce labor costs and enable routine, automated monitoring. 
 
 <img src="./doc/Ulva_05_1_cycle3_example.gif" height="500">
 
-While occasional model predictions may occur at the frame level, these errors are effectively smoothed and mitigated by aggregating data at the per-revolution level (i.e., footage recorded over approximately three minutes), resulting in robust biomass estimates.
+While the model occasionaly produces outliers at the frame level, these errors are effectively addressed by aggregating data at the per-revolution level (i.e., footage recorded over approximately three minutes). This aggregation yields robust predictors for biomass density.
+
+We evaluate their predictive power of each derived feature (e.g., RGB, surface area) by fitting both linear and log-linear ordinary least squares (OLS) regression models using the `statsmodels` package.
 
 ## Monitoring setup
 An IDS UI-5290-FA-C-HQ camera with a 7 mm lens was mounted approximately 80 centimeters above the raceway (see Figure), with a field of view of 75 cm so that the full width of the raceway was in view of the camera. For camera settings, see the dataset at [Zenodo](https://doi.org/10.5281/zenodo.18849922). For details on the monitoring setup, see the manuscript.
@@ -43,11 +45,6 @@ conda install -c conda-forge numpy pandas scikit-learn scikit-image opencv matpl
 To reproduce the results in the manuscript:
 1. Download the dataset from [Zenodo](https://doi.org/10.5281/zenodo.18849922) and place it in `/data/` folder at the root of this project.
 2. Run the script: `main.py` with default parameters
-
-To test on your own dataset:
-1. Record footage of your cultivation system in similar circumstances to the GIF above.
-2. Store the .mp4 or .avi in `/data/inference/`.
-3. Run the script `inference.py` **NOT IMPLEMENTED YET**
 
 ---
 If you use this code or dataset, please cite our [paper](google.com). For questions, feedback, or collaborations, feel free to [contact us](mailto:joost.vandalen@wur.nl).
