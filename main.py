@@ -171,21 +171,21 @@ def ulva_analysis_pipeline(
     features = ['surface_area_pct', 'tot_surface_area', 'mean_R', 'mean_G', 'mean_B', 'mean_L', 'mean_a', 'mean_b']
     feature_names = ['Surface area [%]', 'Tot. surface area [px]', 'Red [-]', 'Green [-]', 'Blue [-]', 'Luminance [-]', 'a* [-]', 'b* [-]']
 
+    # Perform correlation, VIF and fit regressions
+    model_file = analyze_feature_relationships(
+        analysis_df=analysis_df,
+        feature_columns=features,
+        output_folder='doc/output'
+    )
+
     # Combined regressors plot
     plot_all_predictors(analysis_df, features, feature_names, output_folder='doc/output')
 
     # Regressions but limited to surface area and RGB
     plot_select_predictors(analysis_df, output_folder='doc')
 
-    # Regressors into own plots
-    analyze_feature_relationships(
-        analysis_df=analysis_df,
-        feature_columns=features,
-        output_folder='doc/output'
-    )
-
     print("\n[INFO] Step 4/4: Plotting frame examples...")
-    #  Plot random frames at different biomass densities (0.5, 2.0, 4.0 and 5.0 g/L)
+    # Plot random frames at different biomass densities (0.5, 2.0, 4.0 and 5.0 g/L)
     plot_density_examples(
         all_extracted_frames,
         model_name='facebook/sam-vit-huge',

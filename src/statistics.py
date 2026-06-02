@@ -8,19 +8,23 @@ import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.eval_measures import rmse
 from typing import List, Tuple
+import json
 
-def create_regression_plot(
+def fit_regression_models(
         df: pd.DataFrame, 
-        feature_columns: List[str], 
-        output_name: str, 
-        regression_type=''
-    ):
+        feature_columns: List[str],
+        aggregation: str,
+        regression_type: str,
+        store:dict
+    ) -> None:
     """
     Compute linear and log-linear OLS regression for each feature vs. density.
     Prints regression summaries and saves plots.
     """
     print(f"{'-' * 50}")
-    print(f'[INFO] {'#' * 20} Regression results {output_name} {'#' * 20}')
+    print(f'[INFO] {'#' * 20} Regression results {aggregation} {'#' * 20}')
+
+    models = {}
 
     # Plot each feature and compute regression
     for i, feature in enumerate(feature_columns):
@@ -28,11 +32,9 @@ def create_regression_plot(
         y = df['density']
         
         # Since data is exponential, log(y) to fit OLS
-        if regression_type == 'log':
-            model_type = "Log-linear"
+        if regression_type == 'loglinear':
 
             # Log-transform
-            log_x = np.log(x)
             log_y = np.log(y)
 
             # Fit OLS
@@ -54,7 +56,6 @@ def create_regression_plot(
 
         # Normal OLS with unchanged values
         else:
-            model_type = "Linear"
 
             # Fit linear regression
             X = sm.add_constant(x)
@@ -73,19 +74,40 @@ def create_regression_plot(
             p_value_str = "<.001"
         else:
             p_value_str = f"{p_value:.3f}"
-            
+        
+        if feature not in store:
+            store[feature] = {}
+
+        if aggregation not in store[feature]:
+            store[feature][aggregation] = {}
+
+        store[feature][aggregation][regression_type] = {
+            "params": {
+                k: float(v)
+                for k, v in model.params.to_dict().items()
+            },
+            "r_squared": float(r_squared),
+            "p_value": float(p_value),
+            "rmse": float(rmse_val),
+            "n": int(len(x)),
+            "x_min": float(x.min()),
+            "x_max": float(x.max())
+        }
+        
         # Print results
-        print(f"\n[INFO] {model_type} regression for {feature}:")
+        print(f"\n[INFO] {regression_type} regression for {feature}:")
         print(f"[INFO] n = {len(x)} | R² = {r_squared:.2f} | p-value = {p_value_str} | RMSE {rmse_val:.2f} g/L")
 
         # Print regression summary
         print(f"\n[INFO] \n{model.summary(alpha=0.05)}")
+    
+    return models
 
 def create_correlation_plot(
         df: pd.DataFrame, 
         correlations: pd.Series,
         feature_columns: List[str], 
-        output_name: str, 
+        aggregation: str, 
         output_folder: str = 'doc', 
         scatter_color: str = '#219ebc'
     ) -> None:
@@ -119,16 +141,16 @@ def create_correlation_plot(
         axes[j].axis('off')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_folder, f'correlation_{output_name}.png'), dpi=200)
+    plt.savefig(os.path.join(output_folder, f'correlation_{aggregation}.png'), dpi=200)
     plt.close()
 
     # Print correlation table
-    print(f"[INFO] Correlation with density ({output_name}):\n{correlations.round(2)}\n{'-' * 50}")
+    print(f"[INFO] Correlation with density ({aggregation}):\n{correlations.round(2)}\n{'-' * 50}")
 
 def create_colinearity_plot(
         df: pd.DataFrame, 
         feature_columns: List[str],
-        output_name: str,
+        aggregation: str,
         output_folder: str = 'doc'
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """ Compute colinearity for each feature in the DataFrame """
@@ -160,17 +182,17 @@ def create_colinearity_plot(
     ax2.legend()
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_folder, f'colinearity_{output_name}.png'), dpi=200)
+    plt.savefig(os.path.join(output_folder, f'colinearity_{aggregation}.png'), dpi=200)
     plt.close()
 
-    print(f"[INFO] Variance Inflation Factor (VIF) output ({output_name}):\n {vif_data.round(1)}")
+    print(f"[INFO] Variance Inflation Factor (VIF) output ({aggregation}):\n {vif_data.round(1)}")
     return vif_data, corr_matrix
 
 def analyze_feature_relationships(
     analysis_df: pd.DataFrame,
     feature_columns: List[str],
     output_folder: str = 'doc'
-) -> None:
+) -> str:
     """
     Main function to analyze relationships between features and density.
     Performs correlation, collinearity, and regression analysis.
@@ -184,34 +206,57 @@ def analyze_feature_relationships(
     print(f"Analyzing relationships between predictor and biomass density")
     print(f"{'=' * 50}")
 
+    regression_models = {}
+
     # Preprocess data for cumulative surface area
     max_surface = analysis_df.groupby(['density', 'cycle'], as_index=False)['tot_surface_area'].max()
     processed_data = analysis_df.drop(columns=['tot_surface_area']).merge(max_surface, on=['density', 'cycle'], how='left')
+
+    # Then create summarized data for per-revolution analysis
+    processed_data_revolution = processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean()
 
     # Compute correlations
     correlations = processed_data[['density'] + feature_columns].corr()['density'][1:]
 
     # Analysis configurations
-    # Fit either standard OLS or log-linear model
+    # Fit either linear OLS or log-linear model
     analyses = [
-        # (data, name, color, regression_type)
-        (processed_data, "per_frame_linear", '#219ebc', ''),
-        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_linear", '#606c38', ''),
-        (processed_data, "per_frame_loglinear", '#fb8500', 'log'),
-        (processed_data.groupby(['density', 'cycle'], as_index=False)[feature_columns].mean(), "per_cycle_loglinear", '#8b5cf6', 'log')
+        # (data, aggregation, regression_type, color)
+        (processed_data, "per_frame", 'linear', '#219ebc'),
+        (processed_data_revolution, "per_cycle", 'linear', '#606c38'),
+        (processed_data, "per_frame", 'loglinear', '#fb8500'),
+        (processed_data_revolution, "per_cycle", 'loglinear', '#8b5cf6')
     ]
 
     # Run all analyses
-    for data_subset, name, color, regression in analyses:
-        # Correlation plot (only for linear)
-        if regression == '':
-            create_correlation_plot(data_subset, correlations, feature_columns, name, output_folder, color)
+    for data_subset, aggregation, regression_type, color in analyses:
+        # Correlation plot
+        if regression_type == 'Linear':
+            create_correlation_plot(
+                data_subset, correlations, 
+                feature_columns, aggregation, 
+                output_folder, color
+            )
 
-        # Colinearity plot (only for linear)
-        if regression == '':
-            create_colinearity_plot(data_subset, feature_columns, name, output_folder)
+            # Colinearity plot
+            create_colinearity_plot(
+                data_subset, feature_columns, 
+                aggregation, output_folder
+            )
 
-        # Regression plot
-        create_regression_plot(data_subset, feature_columns, regression)
+        # Fit OLS regression with linear and log-linear models
+        fit_regression_models(
+            data_subset, feature_columns, 
+            aggregation, regression_type,
+            store=regression_models
+        )
 
-    print(f"\n[INFO] Analysis complete. Results saved to: {output_folder}")
+
+    # Save fitted regression models to JSON for future re-use
+    os.makedirs("models", exist_ok=True)
+    model_file = os.path.join("models", "regression_results.json")
+    with open(model_file, "w") as f:
+        json.dump(regression_models, f, indent=4)
+
+    print(f"\n[INFO] Analysis complete. Results saved to: {model_file}")
+    return model_file
