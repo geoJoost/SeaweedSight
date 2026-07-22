@@ -24,7 +24,7 @@ Camera setup | Adding *Ulva spp.* | Flotation device (i.e., rubber duck)
 
 ```
 # install seaweedsight and its dependencies
-pip install git+ssh://git@github.com/geoJoost/SeaweedSight.git
+git clone git+ssh://git@github.com/geoJoost/SeaweedSight.git
 
 # Setup the environment
 conda create -n seaweedsight
