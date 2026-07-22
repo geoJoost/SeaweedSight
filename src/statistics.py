@@ -47,11 +47,13 @@ def fit_regression_models(
 
             # Since we cannot directly back-transform the outputs due to bias
             # We use Duan's Smearing Retransformation, see: https://en.wikipedia.org/wiki/Smearing_retransformation
-            # To transform RMSE in g/L
+            # To transform RMSE in g/L without assuming distribution
             # NOTE: These cannot directly be compared to naive RMSE with bias-corrected log-linear RMSE
             y_pred_log = model.predict(X)
-            sigma = np.std(model.resid, ddof=int(model.df_model+1))
-            y_pred = np.exp(y_pred_log + 0.5 * sigma**2)  # bias-corrected
+            
+            smearing_factor = np.mean(np.exp(model.resid))
+            y_pred = np.exp(y_pred_log) * smearing_factor
+            
             rmse_val = rmse(y, y_pred)
 
         # Normal OLS with unchanged values
@@ -61,13 +63,16 @@ def fit_regression_models(
             X = sm.add_constant(x)
             model = sm.OLS(y, X).fit()
 
-            # Extract R² and p-value
+            # Extract R2 and p-value
             r_squared = model.rsquared
             p_value = model.f_pvalue
 
             # Calculate RMSE in g/L
             y_pred = model.predict(X)
             rmse_val = rmse(y, y_pred)
+
+            # Default value, only used in log-linear back-transformations
+            smearing_factor = None
 
         # Format p-value for reporting
         if p_value < 0.001:
@@ -86,6 +91,7 @@ def fit_regression_models(
                 k: float(v)
                 for k, v in model.params.to_dict().items()
             },
+            **({"smearing_factor": smearing_factor} if smearing_factor else {}), # Duan's smearing factor for log-linear models
             "r_squared": float(r_squared),
             "p_value": float(p_value),
             "rmse": float(rmse_val),

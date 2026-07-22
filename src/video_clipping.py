@@ -10,9 +10,9 @@ import matplotlib.patches as patches
 def calculate_dynamic_roi(frame, roi_width, roi_height):
     height, width = frame.shape[:2]
 
-    # Center the ROI horizontally
+    # Center the ROI horizontally and vertically
     roi_x = max(0, (width - roi_width) // 2)
-    roi_y = 0  # Align to the top
+    roi_y = max(0, (height - roi_height) // 2)
 
     # Ensure ROI fits within the frame
     roi_width = min(roi_width, width - roi_x)
@@ -67,7 +67,6 @@ def verify_roi(frame, roi):
     Verify the ROI by plotting:
     1. Original full-frame
     2. Original full-frame with ROI overlaid as a red box
-    3. Final clipped frame
 
     Args:
         frame (numpy.ndarray): The frame to visualize.
@@ -75,34 +74,50 @@ def verify_roi(frame, roi):
     """
     roi_x, roi_y, roi_width, roi_height = roi
 
-    # Convert BGR frame to RGB for matplotlib
+    # Convert BGR -> RGB
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Clip the frame to the ROI
-    clipped_frame_rgb = frame_rgb[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
+    # Extract ROI
+    clipped_frame_rgb = frame_rgb[
+        roi_y:roi_y + roi_height,
+        roi_x:roi_x + roi_width
+    ]
 
-    # Create the figure and subplots
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    # Figure setup
+    fig, axes = plt.subplots(1, 2, figsize=(4.5, 2), dpi=300)
 
-    # Subplot 1: Original full-frame
+    titles = [
+        "(a) Full-frame image",
+        "(b) ROI localization",
+    ]
+
+    # (a) Full frame
     axes[0].imshow(frame_rgb)
-    axes[0].set_title('Original Full-Frame')
-    axes[0].axis('off')
+    axes[0].set_title(titles[0], fontsize=11)
+    axes[0].axis("off")
 
-    # Subplot 2: Original full-frame with ROI overlaid
+
+    # (b) ROI overlay
     axes[1].imshow(frame_rgb)
-    rect = patches.Rectangle(
-        (roi_x, roi_y), roi_width, roi_height,
-        linewidth=2, edgecolor='r', facecolor='none'
-    )
-    axes[1].add_patch(rect)
-    axes[1].set_title('Original with ROI Overlay')
-    axes[1].axis('off')
 
-    # Subplot 3: Final clipped frame
-    axes[2].imshow(clipped_frame_rgb)
-    axes[2].set_title('Clipped frame')
-    axes[2].axis('off')
+    # ROI rectangle
+    roi_rect = patches.Rectangle(
+        (roi_x, roi_y),
+        roi_width,
+        roi_height,
+        linewidth=2.5,
+        edgecolor="red",
+        facecolor="none",
+        label="Selected ROI"
+    )
+    axes[1].add_patch(roi_rect)
+    axes[1].set_title(titles[1], fontsize=11)#, fontweight="bold")
+    axes[1].axis("off")
+
+    # Save figure
+    plt.tight_layout()
+    plt.savefig("doc/roi_selection.png", dpi=300)
+    plt.close(fig)
 
 def extract_relevant_frames(
     video_path: str, # .avi or .mp4 file
@@ -179,8 +194,8 @@ def extract_relevant_frames(
             # Clip the frame to the ROI
             clipped_frame = frame[roi_y:roi_y + roi_height, roi_x:roi_x + roi_width]
 
-            # Visualize results
-            # verify_roi(frame, roi) # For debugging
+            # Visualize ROI cropping
+            # verify_roi(frame, (roi_x, roi_y, roi_width, roi_height)) # For debugging
 
             # Save the frame to folder
             if save_frames:
