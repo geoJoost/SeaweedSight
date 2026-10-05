@@ -1,5 +1,5 @@
 # SeaweedSight: Estimating biomass density in land-based cultivation of Ulva spp. using a low cost RGB imaging system
-[[`paper`](google.com)]
+[[`paper`](https://link.springer.com/article/10.1007/s10811-026-03982-x)]
 [[`dataset`](https://doi.org/10.5281/zenodo.18849922)]
 
 
