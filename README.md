@@ -3,7 +3,7 @@
 [[`dataset`](https://doi.org/10.5281/zenodo.18849922)]
 
 
-> The code associated with our [paper](https://google.com) where we demonstrate a method for reliable estimation of *Ulva spp.* biomass in land-based raceways using a low-cost RGB camera. By combining segmentation and regression models, we achieve accurate biomass density predictions (R² = 0.99, RMSE = 0.18 g/L), offering a cost-effective solution to reduce labor costs and enable routine, automated monitoring. 
+> The code associated with our [paper](https://link.springer.com/article/10.1007/s10811-026-03982-x) where we demonstrate a method for reliable estimation of *Ulva spp.* biomass in land-based raceways using a low-cost RGB camera. By combining segmentation and regression models, we achieve accurate biomass density predictions (R² = 0.99, RMSE = 0.18 g/L), offering a cost-effective solution to reduce labor costs and enable routine, automated monitoring. 
 
 <img src="./doc/Ulva_05_1_cycle3_example.gif" height="500">
 
@@ -47,6 +47,6 @@ To reproduce the results in the manuscript:
 2. Run the script: `main.py` with default parameters
 
 ---
-If you use this code or dataset, please cite our [paper](google.com). For questions, feedback, or collaborations, feel free to [contact us](mailto:joost.vandalen@wur.nl).
+If you use this code or dataset, please cite our [paper](https://link.springer.com/article/10.1007/s10811-026-03982-x). For questions, feedback, or collaborations, feel free to [contact us](mailto:joost.vandalen@wur.nl).
 
 
